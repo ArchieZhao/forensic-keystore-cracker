@@ -184,11 +184,11 @@ cd hashcat-6.2.6
 #### Hash格式兼容性（重要！）
 ```
 工具                  输出格式          兼容工具
-keystore2john.py  →  $keystore$    →  John the Ripper
-JksPrivkPrepare.jar → $jksprivk$   →  Hashcat -m 15500 ⭐
+keystore2john.py  →  $keystore$    →  John the Ripper (本项目不使用)
+JksPrivkPrepare.jar → $jksprivk$   →  Hashcat -m 15500 ⭐ (本项目使用)
 ```
 
-**关键发现**: 必须使用JksPrivkPrepare.jar生成`$jksprivk$`格式才能用Hashcat破解JKS私钥。keystore2john生成的格式只能用于John the Ripper。
+**关键发现**: 必须使用JksPrivkPrepare.jar生成`$jksprivk$`格式才能用Hashcat破解JKS私钥。keystore2john生成的格式只能用于John the Ripper（本项目不包含此工具）。
 
 #### 破解模式对比
 | 模式 | 工具组合 | 性能 | 适用场景 |
@@ -223,9 +223,6 @@ forensic-keystore-cracker/
 ├── hashcat-6.2.6/                   # Hashcat工具（GPU破解引擎）
 │   ├── hashcat.exe                  # 主程序
 │   └── OpenCL/                      # GPU计算内核
-│
-├── john-1.9.0/                      # John the Ripper（CPU破解）
-│   └── run/keystore2john.py         # Keystore hash提取脚本
 │
 ├── JKS-private-key-cracker-hashcat/
 │   └── JksPrivkPrepare.jar          # ⭐关键工具：JKS hash提取

@@ -49,7 +49,6 @@ pip install -r requirements.txt
 
 3. **下载必需工具**
    - [Hashcat 6.2.6](https://hashcat.net/hashcat/) - 解压到项目根目录的 `hashcat-6.2.6/` 文件夹
-   - [John the Ripper 1.9.0](https://www.openwall.com/john/) - 解压到 `john-1.9.0/` 文件夹
    - JksPrivkPrepare.jar - 已包含在 `JKS-private-key-cracker-hashcat/` 目录中
 
 4. **验证环境**
@@ -275,9 +274,6 @@ forensic-keystore-cracker/
 │   ├── hashcat.exe                  # 主程序
 │   └── OpenCL/                      # GPU计算内核
 │
-├── john-1.9.0/                      # John the Ripper（需下载）
-│   └── run/keystore2john.py         # Keystore hash提取脚本
-│
 ├── JKS-private-key-cracker-hashcat/
 │   └── JksPrivkPrepare.jar          # ⭐关键工具：JKS hash提取
 │
@@ -419,7 +415,6 @@ cd hashcat-6.2.6
 ## 🙏 致谢
 
 - [Hashcat](https://hashcat.net/) - 高性能密码破解工具
-- [John the Ripper](https://www.openwall.com/john/) - 经典密码破解工具
 - [JKS-private-key-cracker-hashcat](https://github.com/floyd-fuh/JKS-private-key-cracker-hashcat) - JKS hash 提取工具
 
 ---

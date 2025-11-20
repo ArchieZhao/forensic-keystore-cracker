@@ -70,10 +70,6 @@ hashcat.potfile
 *.restore
 *.dictstat
 
-# John the Ripper临时文件
-*.pot
-john.pot
-
 # 测试和临时文件
 test_*.py
 temp/
@@ -86,8 +82,6 @@ debug.log
 # 保留目录结构但忽略所有文件（除了.gitkeep）
 hashcat-6.2.6/*
 !hashcat-6.2.6/.gitkeep
-john-1.9.0/*
-!john-1.9.0/.gitkeep
 # 注意：JksPrivkPrepare.jar 保留在仓库中（体积小且必需）
 
 # Windows
