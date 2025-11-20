@@ -19,15 +19,15 @@ from rich.table import Table
 console = Console()
 
 class BatchHashExtractor:
-    def __init__(self):
+    def __init__(self, certificate_dir="certificate"):
         self.jar_path = "JKS-private-key-cracker-hashcat/JksPrivkPrepare.jar"
-        self.certificate_dir = Path("certificate")
+        self.certificate_dir = Path(certificate_dir)
         self.output_dir = Path("batch_crack_output")
         self.output_dir.mkdir(exist_ok=True)
-        
+
         # 线程池大小（基于12900K的线程数）
         self.max_workers = 16
-        
+
         # 统计信息
         self.stats = {
             'total_keystores': 0,
@@ -412,7 +412,29 @@ if __name__ == "__main__":
             return False
 
 def main():
-    extractor = BatchHashExtractor()
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="批量JKS Hash提取器 - 从多个keystore文件批量提取hash",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例用法:
+  python batch_hash_extractor.py                    # 使用默认的certificate目录
+  python batch_hash_extractor.py my_certificates    # 使用自定义目录
+  python batch_hash_extractor.py ../certs           # 使用相对路径
+        """
+    )
+
+    parser.add_argument(
+        'certificate_dir',
+        nargs='?',
+        default='certificate',
+        help='包含keystore文件的目录路径 (默认: certificate)'
+    )
+
+    args = parser.parse_args()
+
+    extractor = BatchHashExtractor(certificate_dir=args.certificate_dir)
     success = extractor.run()
     return 0 if success else 1
 

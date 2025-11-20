@@ -18,15 +18,16 @@ from rich.prompt import Confirm, Prompt
 console = Console()
 
 class UltimateBatchCracker:
-    def __init__(self):
+    def __init__(self, certificate_dir="certificate"):
+        self.certificate_dir = Path(certificate_dir)
         self.output_dir = Path("batch_crack_output")
         self.output_dir.mkdir(exist_ok=True)
-        
+
         # 关键文件路径
         self.batch_hash_file = self.output_dir / "all_keystores.hash"
         self.potfile_path = self.output_dir / "batch_results.potfile"
         self.hashcat_path = Path("hashcat-6.2.6/hashcat.exe")
-        
+
         # 步骤状态
         self.steps = {
             'hash_extraction': False,
@@ -47,9 +48,9 @@ class UltimateBatchCracker:
     def check_prerequisites(self):
         """检查前置条件"""
         console.print("[cyan]🔍 系统环境检查...[/cyan]")
-        
+
         checks = [
-            ("Certificate目录", Path("certificate").exists()),
+            (f"Certificate目录 ({self.certificate_dir})", self.certificate_dir.exists()),
             ("JksPrivkPrepare.jar", Path("JKS-private-key-cracker-hashcat/JksPrivkPrepare.jar").exists()),
             ("Hashcat", self.hashcat_path.exists()),
             ("Java环境", self._check_java()),
@@ -109,7 +110,7 @@ class UltimateBatchCracker:
         try:
             # 调用批量hash提取器
             from batch_hash_extractor import BatchHashExtractor
-            extractor = BatchHashExtractor()
+            extractor = BatchHashExtractor(certificate_dir=str(self.certificate_dir))
             success = extractor.run()
             
             if success and self.batch_hash_file.exists():
@@ -389,14 +390,38 @@ class UltimateBatchCracker:
         return True
 
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="终极批量JKS破解器 - 一键完成Hash提取、GPU破解、结果分析",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例用法:
+  python ultimate_batch_cracker.py                    # 使用默认的certificate目录
+  python ultimate_batch_cracker.py my_certificates    # 使用自定义目录
+  python ultimate_batch_cracker.py ../certs           # 使用相对路径
+  python ultimate_batch_cracker.py /path/to/certs     # 使用绝对路径
+        """
+    )
+
+    parser.add_argument(
+        'certificate_dir',
+        nargs='?',
+        default='certificate',
+        help='包含keystore文件的目录路径 (默认: certificate)'
+    )
+
+    args = parser.parse_args()
+
     console.print("=" * 80)
     console.print("[bold cyan]终极批量JKS破解器 v1.0[/bold cyan]")
     console.print("[yellow]专为Windows 11 + RTX 3080 + 70个keystore优化[/yellow]")
+    console.print(f"[green]目标目录: {args.certificate_dir}[/green]")
     console.print("=" * 80)
-    
-    cracker = UltimateBatchCracker()
+
+    cracker = UltimateBatchCracker(certificate_dir=args.certificate_dir)
     success = cracker.run()
-    
+
     return 0 if success else 1
 
 if __name__ == "__main__":
