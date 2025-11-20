@@ -83,9 +83,9 @@ Requirements:
 Technical Notes:
     keytool查找策略:
         7个路径: keytool, java/bin/keytool, jdk/bin/keytool,
-                C:\Program Files\Java\jdk*\bin\keytool.exe,
-                C:\Program Files\Eclipse Adoptium\jdk*\bin\keytool.exe,
-                C:\Program Files\OpenJDK\jdk*\bin\keytool.exe (keystore_info_extractor.py:64-71)
+                C:\\Program Files\\Java\\jdk*\\bin\\keytool.exe,
+                C:\\Program Files\\Eclipse Adoptium\\jdk*\\bin\\keytool.exe,
+                C:\\Program Files\\OpenJDK\\jdk*\\bin\\keytool.exe (keystore_info_extractor.py:64-71)
         glob匹配: 处理jdk*通配符路径 (keystore_info_extractor.py:75-80)
         测试方法: keytool -help检查returncode或stderr含"keytool" (keystore_info_extractor.py:82-88)
 
@@ -95,17 +95,17 @@ Technical Notes:
         类型识别: 根据成功的storetype设置keystore_type (keystore_info_extractor.py:206-209)
 
     别名解析正则:
-        模式: ^([^,\s]+),\s+\d+.*(?:PrivateKeyEntry|trustedCertEntry|SecretKeyEntry)
+        模式: ^([^,\\s]+),\\s+\\d+.*(?:PrivateKeyEntry|trustedCertEntry|SecretKeyEntry)
         匹配: "mykey, 2024-01-01, PrivateKeyEntry" → 提取"mykey" (keystore_info_extractor.py:164, 168-170)
 
     证书信息正则解析:
         6个字段模式 (keystore_info_extractor.py:212-219):
-            subject: "Owner:\s*(.+?)(?:\n|$)"
-            issuer: "Issuer:\s*(.+?)(?:\n|$)"
-            valid_from: "Valid from:\s*(.+?)\s+until:"
-            valid_to: "until:\s*(.+?)(?:\n|$)"
-            signature_algorithm: "Signature algorithm name:\s*(.+?)(?:\n|$)"
-            serial_number: "Serial number:\s*(.+?)(?:\n|$)"
+            subject: "Owner:\\s*(.+?)(?:\\n|$)"
+            issuer: "Issuer:\\s*(.+?)(?:\\n|$)"
+            valid_from: "Valid from:\\s*(.+?)\\s+until:"
+            valid_to: "until:\\s*(.+?)(?:\\n|$)"
+            signature_algorithm: "Signature algorithm name:\\s*(.+?)(?:\\n|$)"
+            serial_number: "Serial number:\\s*(.+?)(?:\\n|$)"
 
     公钥哈希计算流程:
         1. keytool -export导出证书到临时文件 (keystore_info_extractor.py:240-250)
