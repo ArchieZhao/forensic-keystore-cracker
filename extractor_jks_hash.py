@@ -74,6 +74,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 from rich.panel import Panel
 from rich.table import Table
+from benchmark_timer import BenchmarkTimer, timer
 
 console = Console()
 
@@ -227,10 +228,18 @@ class JksHashExtractor:
     
     def batch_extract_hashes(self, keystores):
         """批量并行提取hash"""
+        # 创建计时器
+        extract_timer = BenchmarkTimer(
+            "批量Hash提取",
+            total_items=len(keystores),
+            verbose=False  # 使用progress bar时关闭详细输出
+        )
+        extract_timer.start()
+
         console.print(f"[cyan]⚡ 启动并行提取 (最大 {self.max_workers} 线程)...[/cyan]")
-        
+
         successful_hashes = []
-        
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
@@ -238,20 +247,20 @@ class JksHashExtractor:
             TaskProgressColumn(),
             console=console
         ) as progress:
-            
+
             task = progress.add_task("提取hash...", total=len(keystores))
-            
+
             with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                 # 提交所有任务
                 future_to_keystore = {
-                    executor.submit(self.extract_single_hash, ks): ks 
+                    executor.submit(self.extract_single_hash, ks): ks
                     for ks in keystores
                 }
-                
+
                 # 收集结果
                 for future in as_completed(future_to_keystore):
                     result = future.result()
-                    
+
                     if result['success']:
                         successful_hashes.append(result)
                         self.stats['successful_extracts'] += 1
@@ -261,9 +270,19 @@ class JksHashExtractor:
                             'uuid': result['uuid'],
                             'error': result['error']
                         })
-                    
+
+                    # 更新计时器进度
+                    extract_timer.update_progress(self.stats['successful_extracts'] + self.stats['failed_extracts'])
+
                     progress.advance(task, 1)
-        
+
+        # 结束计时并保存统计
+        stats = extract_timer.end()
+
+        # 显示性能统计
+        console.print(f"[yellow]⚡ 提取性能: {stats.speed:.2f} 文件/秒[/yellow]")
+        console.print(f"[yellow]⏱️  平均单文件耗时: {stats.avg_time_per_item:.2f}秒[/yellow]")
+
         return successful_hashes
     
     def create_batch_hash_file(self, hash_results):

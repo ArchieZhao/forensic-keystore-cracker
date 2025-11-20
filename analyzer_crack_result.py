@@ -86,6 +86,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+from benchmark_timer import BenchmarkTimer, timer
 
 # 导入现有的信息提取器
 try:
@@ -301,6 +302,16 @@ class CrackResultAnalyzer:
 
         # 使用CPU核心数-1个进程（避免占满所有核心）
         num_workers = max(1, cpu_count() - 1)
+
+        # 创建计时器
+        extract_timer = BenchmarkTimer(
+            "证书信息并行提取",
+            total_items=len(tasks),
+            verbose=False  # 使用progress bar时关闭详细输出
+        )
+        extract_timer.start()
+        extract_timer.checkpoint("multiprocessing_start")
+
         console.print(f"[cyan]🔍 并行提取完整信息（{num_workers}个工作进程，共{len(tasks)}个任务）...[/cyan]")
 
         complete_results = []
@@ -326,7 +337,24 @@ class CrackResultAnalyzer:
                     else:
                         self.stats['failed_info_extraction'] += 1
 
+                    # 更新计时器进度
+                    extract_timer.update_progress(len(complete_results))
+
                     progress.advance(task, 1)
+
+        extract_timer.checkpoint("multiprocessing_end")
+
+        # 结束计时并显示统计
+        stats = extract_timer.end()
+
+        # 显示性能统计
+        console.print(f"\n[yellow]⚡ 证书提取性能（多进程）:[/yellow]")
+        console.print(f"[yellow]  工作进程数: {num_workers}[/yellow]")
+        console.print(f"[yellow]  提取速度: {stats.speed:.2f} 证书/秒[/yellow]")
+        console.print(f"[yellow]  单证书平均耗时: {stats.avg_time_per_item:.2f}秒[/yellow]")
+        console.print(f"[yellow]  串行预估耗时: {stats.elapsed_seconds * num_workers:.1f}秒[/yellow]")
+        console.print(f"[yellow]  实际耗时: {stats.elapsed_seconds:.1f}秒[/yellow]")
+        console.print(f"[yellow]  性能提升: {num_workers:.1f}x (理论) / {min(stats.elapsed_seconds * num_workers / max(stats.elapsed_seconds, 0.1), num_workers * 1.5):.1f}x (实际)[/yellow]")
 
         return complete_results
     

@@ -176,6 +176,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.prompt import Confirm, Prompt
+from benchmark_timer import BenchmarkTimer, BenchmarkReporter
 
 console = Console()
 
@@ -196,6 +197,12 @@ class BatchCrackCli:
             'gpu_cracking': False,
             'result_analysis': False
         }
+
+        # Benchmark报告器
+        self.benchmark_reporter = BenchmarkReporter(self.output_dir / "benchmarks")
+
+        # 各阶段计时器统计
+        self.phase_stats = {}
     
     def show_banner(self):
         """显示启动横幅"""
@@ -259,15 +266,25 @@ class BatchCrackCli:
         """步骤1: 批量提取hash"""
         console.print("\n" + "="*60)
         console.print("[bold yellow]步骤 1/3: 批量Hash提取[/bold yellow]")
-        
+
+        # 创建阶段计时器
+        phase1_timer = BenchmarkTimer("阶段1 - Hash提取")
+        phase1_timer.start()
+
         if self.batch_hash_file.exists():
             console.print(f"[green]✅ Hash文件已存在: {self.batch_hash_file}[/green]")
             if not Confirm.ask("是否重新提取hash?"):
                 self.steps['hash_extraction'] = True
+                phase1_stats = phase1_timer.end()
+                self.phase_stats['phase1_hash_extraction'] = phase1_stats
+                self.benchmark_reporter.save_stats("阶段1-Hash提取(跳过)", phase1_stats, {
+                    'skipped': True,
+                    'hash_file': str(self.batch_hash_file)
+                })
                 return True
-        
+
         console.print("[cyan]🔄 启动批量hash提取器...[/cyan]")
-        
+
         try:
             # 调用批量hash提取器
             from extractor_jks_hash import JksHashExtractor
@@ -277,25 +294,43 @@ class BatchCrackCli:
             if success and self.batch_hash_file.exists():
                 self.steps['hash_extraction'] = True
                 console.print("[green]✅ Hash提取完成[/green]")
+
+                # 保存统计
+                phase1_stats = phase1_timer.end()
+                self.phase_stats['phase1_hash_extraction'] = phase1_stats
+                self.benchmark_reporter.save_stats("阶段1-Hash提取", phase1_stats, {
+                    'total_keystores': extractor.stats['total_keystores'],
+                    'successful_extracts': extractor.stats['successful_extracts'],
+                    'failed_extracts': extractor.stats['failed_extracts']
+                })
+
                 return True
             else:
                 console.print("[red]❌ Hash提取失败[/red]")
+                phase1_timer.end()
                 return False
 
         except ImportError:
             console.print("[red]❌ 无法导入extractor_jks_hash模块[/red]")
+            phase1_timer.end()
             return False
         except Exception as e:
             console.print(f"[red]❌ Hash提取出错: {e}[/red]")
+            phase1_timer.end()
             return False
     
     def step2_gpu_cracking(self):
         """步骤2: GPU破解"""
         console.print("\n" + "="*60)
         console.print("[bold yellow]步骤 2/3: GPU批量破解[/bold yellow]")
-        
+
+        # 创建阶段计时器
+        phase2_timer = BenchmarkTimer("阶段2 - GPU破解")
+        phase2_timer.start()
+
         if not self.batch_hash_file.exists():
             console.print("[red]❌ Hash文件不存在，请先完成步骤1[/red]")
+            phase2_timer.end()
             return False
         
         # 检查是否已有破解结果
@@ -396,45 +431,72 @@ class BatchCrackCli:
             return_code = process.poll()
             console.print(f"\n破解完成，返回码: {return_code}")
             
+            # 保存统计
+            phase2_stats = phase2_timer.end()
+            self.phase_stats['phase2_gpu_cracking'] = phase2_stats
+
             if return_code == 0:
                 console.print("[green]🎉 密码破解成功！[/green]")
                 self.steps['gpu_cracking'] = True
+                self.benchmark_reporter.save_stats("阶段2-GPU破解", phase2_stats, {
+                    'return_code': return_code,
+                    'status': '成功'
+                })
                 return True
             elif return_code == 1:
                 console.print("[yellow]⚠️ 破解完成但未找到密码[/yellow]")
                 self.steps['gpu_cracking'] = True
+                self.benchmark_reporter.save_stats("阶段2-GPU破解", phase2_stats, {
+                    'return_code': return_code,
+                    'status': '完成但未找到密码'
+                })
                 return True
             else:
                 console.print("[red]❌ 破解过程出现错误[/red]")
+                self.benchmark_reporter.save_stats("阶段2-GPU破解", phase2_stats, {
+                    'return_code': return_code,
+                    'status': '错误'
+                })
                 return False
-                
+
         except KeyboardInterrupt:
             console.print("\n[yellow]⏹️ 用户中断破解[/yellow]")
             console.print("[cyan]💡 可以稍后使用 --restore 恢复会话[/cyan]")
             # 即使中断也认为这一步完成了（可以恢复）
             self.steps['gpu_cracking'] = True
+            phase2_stats = phase2_timer.end()
+            self.phase_stats['phase2_gpu_cracking'] = phase2_stats
+            self.benchmark_reporter.save_stats("阶段2-GPU破解(中断)", phase2_stats, {
+                'status': '用户中断'
+            })
             return True
         except Exception as e:
             console.print(f"[red]❌ 破解执行失败: {e}[/red]")
+            phase2_timer.end()
             return False
     
     def step3_analyze_results(self):
         """步骤3: 结果分析"""
         console.print("\n" + "="*60)
         console.print("[bold yellow]步骤 3/3: 结果分析与报告生成[/bold yellow]")
-        
+
+        # 创建阶段计时器
+        phase3_timer = BenchmarkTimer("阶段3 - 结果分析")
+        phase3_timer.start()
+
         if not self.potfile_path.exists():
             console.print("[yellow]⚠️ 未找到破解结果文件[/yellow]")
             console.print("[cyan]💡 这可能意味着:[/cyan]")
             console.print("[cyan]- 破解尚未完成[/cyan]")
             console.print("[cyan]- 所有密码都没有被找到[/cyan]")
             console.print("[cyan]- 破解过程出现了问题[/cyan]")
-            
+
             if not Confirm.ask("是否继续分析（可能没有结果）?"):
+                phase3_timer.end()
                 return False
-        
+
         console.print("[cyan]🔍 启动结果分析器...[/cyan]")
-        
+
         try:
             # 调用结果分析器
             from analyzer_crack_result import CrackResultAnalyzer
@@ -444,16 +506,29 @@ class BatchCrackCli:
             if success:
                 self.steps['result_analysis'] = True
                 console.print("[green]✅ 结果分析完成[/green]")
+
+                # 保存统计
+                phase3_stats = phase3_timer.end()
+                self.phase_stats['phase3_result_analysis'] = phase3_stats
+                self.benchmark_reporter.save_stats("阶段3-结果分析", phase3_stats, {
+                    'cracked_passwords': analyzer.stats['cracked_passwords'],
+                    'successful_info_extraction': analyzer.stats['successful_complete_info'],
+                    'failed_info_extraction': analyzer.stats['failed_info_extraction']
+                })
+
                 return True
             else:
                 console.print("[red]❌ 结果分析失败[/red]")
+                phase3_timer.end()
                 return False
 
         except ImportError:
             console.print("[red]❌ 无法导入analyzer_crack_result模块[/red]")
+            phase3_timer.end()
             return False
         except Exception as e:
             console.print(f"[red]❌ 结果分析出错: {e}[/red]")
+            phase3_timer.end()
             return False
     
     def show_final_summary(self):
@@ -514,39 +589,66 @@ class BatchCrackCli:
     def run(self):
         """执行完整的批量破解流程"""
         self.show_banner()
-        
+
+        # 创建总体计时器
+        total_timer = BenchmarkTimer("批量破解完整流程")
+        total_timer.start()
+
         # 前置检查
         if not self.check_prerequisites():
             console.print("\n[red]❌ 环境检查失败，请解决上述问题后重试[/red]")
+            total_timer.end()
             return False
-        
+
         console.print("\n[green]✅ 环境检查通过，准备开始批量破解[/green]")
-        
+
         # 执行三个主要步骤
         try:
             # 步骤1: 提取hash
+            total_timer.checkpoint("phase1_start")
             if not self.step1_extract_hashes():
                 console.print("[red]❌ 步骤1失败，无法继续[/red]")
+                total_timer.end()
                 return False
-            
+            total_timer.checkpoint("phase1_end")
+
             # 步骤2: GPU破解
+            total_timer.checkpoint("phase2_start")
             if not self.step2_gpu_cracking():
                 console.print("[red]❌ 步骤2失败，无法继续[/red]")
+                total_timer.end()
                 return False
-            
+            total_timer.checkpoint("phase2_end")
+
             # 步骤3: 结果分析
+            total_timer.checkpoint("phase3_start")
             if not self.step3_analyze_results():
                 console.print("[yellow]⚠️ 步骤3失败，但破解可能已完成[/yellow]")
-            
+            total_timer.checkpoint("phase3_end")
+
         except KeyboardInterrupt:
             console.print("\n[yellow]⏹️ 用户中断操作[/yellow]")
         except Exception as e:
             console.print(f"\n[red]💥 未预期的错误: {e}[/red]")
+            total_timer.end()
             return False
         finally:
+            # 结束总计时
+            total_stats = total_timer.end()
+            self.phase_stats['total'] = total_stats
+
+            # 保存总体统计
+            self.benchmark_reporter.save_stats("总计", total_stats, {
+                'all_phases_completed': all(self.steps.values())
+            })
+
+            # 生成最终benchmark报告
+            console.print("\n[cyan]📊 生成Benchmark性能报告...[/cyan]")
+            self.benchmark_reporter.generate_summary_report()
+
             # 无论如何都显示总结
             self.show_final_summary()
-        
+
         console.print("\n[bold green]🎉 批量破解流程完成！[/bold green]")
         return True
 

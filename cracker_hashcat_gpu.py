@@ -124,6 +124,7 @@ import hashlib
 import logging
 from concurrent.futures import ThreadPoolExecutor
 import argparse
+from benchmark_timer import BenchmarkTimer, timer
 
 # 检查rich库是否可用
 try:
@@ -706,15 +707,22 @@ class GPUHashcatCracker:
     def run_batch_crack(self, hash_file: Path, complete_mode: bool = False):
         """运行批量破解"""
         self.print_banner()
-        
+
+        # 创建总体计时器
+        crack_timer = BenchmarkTimer("GPU批量破解", verbose=True)
+        crack_timer.start()
+
         # 读取hash文件
         hashes = self.read_hash_file(hash_file)
         if not hashes:
             self.console.print("[red]❌ 未找到有效的hash[/red]")
             return
-            
+
         self.stats['total_hashes'] = len(hashes)
         self.stats['start_time'] = time.time()
+
+        # 设置总任务数
+        crack_timer.stats.total_items = len(hashes)
         
         self.console.print(f"[green]📊 总共找到 {len(hashes)} 个hash需要破解 (完整6位破解模式)[/green]")
         self.console.print(f"[yellow]🎯 将系统性测试全部 62^6 = 56,800,235,584 种6位大小写字母+数字组合[/yellow]")
@@ -762,16 +770,24 @@ class GPUHashcatCracker:
                     for hash_id, hash_line in hash_list:
                         if self.stop_flag.is_set():
                             break
-                            
+
                         success, password = self.crack_single_hash(hash_id, hash_line, algo_type, complete_mode)
-                        
+
                         if success:
                             self.stats['cracked'] += 1
                             self.stats['passwords'][hash_id] = password
                         else:
                             self.stats['failed'] += 1
-                            
+
                         self.stats['processed'] += 1
+
+                        # 更新计时器进度
+                        crack_timer.update_progress(self.stats['processed'])
+
+                        # 每10个hash打印一次进度统计
+                        if self.stats['processed'] % 10 == 0:
+                            crack_timer.print_progress()
+
                         progress.update(task, advance=1)
         else:
             # 回退到基础进度显示
@@ -796,8 +812,18 @@ class GPUHashcatCracker:
                         print(f"❌ 破解失败")
                         
                     self.stats['processed'] += 1
-                    
+
         self.stats['end_time'] = time.time()
+
+        # 结束计时并保存统计
+        crack_stats = crack_timer.end()
+
+        # 显示性能统计
+        console.print(f"\n[yellow]⚡ 破解性能统计:[/yellow]")
+        console.print(f"[yellow]  平均速度: {crack_stats.speed:.2f} hash/秒[/yellow]")
+        console.print(f"[yellow]  单hash平均耗时: {crack_stats.avg_time_per_item:.2f}秒[/yellow]")
+        console.print(f"[yellow]  成功率: {(self.stats['cracked']/max(self.stats['processed'],1)*100):.1f}%[/yellow]")
+
         self.generate_final_report()
         
     def generate_final_report(self):
