@@ -359,8 +359,7 @@ class BatchCrackCli:
         
         # 确认开始破解
         console.print("\n[red]⚠️ 重要警告:[/red]")
-        console.print("[red]- 此过程预计需要约66天连续运行[/red]")
-        console.print("[red]- 建议在稳定的环境中24/7运行[/red]")
+        console.print("[red]- 建议在稳定的环境中运行[/red]")
         console.print("[red]- 可随时Ctrl+C中断，稍后用--restore恢复[/red]")
         
         if not Confirm.ask("\n🚀 确认开始GPU破解?"):
@@ -543,7 +542,7 @@ class BatchCrackCli:
         steps_table.add_column("说明", style="white")
         
         step_info = [
-            ("1. Hash提取", self.steps['hash_extraction'], "从70个keystore提取$jksprivk$格式hash"),
+            ("1. Hash提取", self.steps['hash_extraction'], "从keystore提取$jksprivk$格式hash"),
             ("2. GPU破解", self.steps['gpu_cracking'], "使用RTX 3080进行6位密码破解"),
             ("3. 结果分析", self.steps['result_analysis'], "生成包含MD5/SHA1的详细报告")
         ]

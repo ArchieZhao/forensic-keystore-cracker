@@ -147,20 +147,66 @@ class JksHashExtractor:
             return True
     
     def scan_keystores(self):
-        """扫描所有keystore文件"""
+        """智能扫描keystore文件（支持根目录/UUID子目录/单文件三种模式）"""
         console.print("[cyan]📁 扫描keystore文件...[/cyan]")
-        
+
         keystores = []
-        for uuid_dir in self.certificate_dir.iterdir():
-            if uuid_dir.is_dir():
-                keystore_file = uuid_dir / "apk.keystore"
-                if keystore_file.exists():
+
+        # 🔧 修复1：检测输入类型
+        if self.certificate_dir.is_file():
+            # 场景1：直接传入keystore文件路径
+            if self.certificate_dir.suffix in ['.jks', '.keystore']:
+                uuid = self.certificate_dir.parent.name  # 使用父目录名作为UUID
+                keystores.append({
+                    'uuid': uuid,
+                    'path': self.certificate_dir,
+                    'size': self.certificate_dir.stat().st_size
+                })
+                console.print(f"[green]✅ 单文件模式：{self.certificate_dir.name}[/green]")
+            else:
+                console.print(f"[red]❌ 不支持的文件类型：{self.certificate_dir.suffix}[/red]")
+                console.print(f"[yellow]💡 支持的文件类型：.jks, .keystore[/yellow]")
+                return keystores
+
+        elif self.certificate_dir.is_dir():
+            # 🔧 修复2：检查是否为UUID子目录（目录下直接有keystore文件）
+            direct_keystores = list(self.certificate_dir.glob("*.keystore")) + \
+                               list(self.certificate_dir.glob("*.jks"))
+
+            if direct_keystores:
+                # 场景2：传入的是UUID子目录（如 certificate/UUID/）
+                uuid = self.certificate_dir.name  # 使用目录名作为UUID
+                for keystore_file in direct_keystores:
                     keystores.append({
-                        'uuid': uuid_dir.name,
+                        'uuid': uuid,
                         'path': keystore_file,
                         'size': keystore_file.stat().st_size
                     })
-        
+                console.print(f"[green]✅ UUID子目录模式：发现 {len(direct_keystores)} 个keystore[/green]")
+
+            else:
+                # 场景3：传入的是根目录（如 certificate/），需要遍历子目录
+                subdirs = [d for d in self.certificate_dir.iterdir() if d.is_dir()]
+
+                if not subdirs:
+                    console.print(f"[yellow]⚠️ 目录 {self.certificate_dir} 为空或不包含子目录[/yellow]")
+                    return keystores
+
+                for uuid_dir in subdirs:
+                    # 查找该子目录下所有keystore文件
+                    for keystore_file in list(uuid_dir.glob("*.keystore")) + list(uuid_dir.glob("*.jks")):
+                        keystores.append({
+                            'uuid': uuid_dir.name,
+                            'path': keystore_file,
+                            'size': keystore_file.stat().st_size
+                        })
+
+                console.print(f"[green]✅ 根目录批量模式：遍历 {len(subdirs)} 个子目录[/green]")
+
+        else:
+            console.print(f"[red]❌ 无效路径：{self.certificate_dir}[/red]")
+            console.print(f"[yellow]💡 请确认路径存在且可访问[/yellow]")
+
         self.stats['total_keystores'] = len(keystores)
         console.print(f"[green]✅ 发现 {len(keystores)} 个keystore文件[/green]")
         return keystores
@@ -438,7 +484,7 @@ if __name__ == "__main__":
         console.print(Panel.fit(
             "[bold cyan]🚀 批量JKS Hash提取器[/bold cyan]\\n"
             "RTX 3080 + 6位密码专用优化\\n"
-            "目标: 70个keystore批量处理",
+            "目标: keystore批量处理",
             border_style="cyan"
         ))
         

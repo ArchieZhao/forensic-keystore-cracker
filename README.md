@@ -10,6 +10,7 @@
 
 - **🚀 GPU 加速破解**: 基于 Hashcat 的高性能密码破解（~10,000 H/s）
 - **📦 批量处理**: 支持单文件和大规模目录批量破解（70+ 文件）
+- **🧠 智能路径识别** ✨: 自动识别根目录/UUID目录/单文件三种模式（v2.1+）
 - **🔍 证书分析**: 自动提取公钥 MD5/SHA1 指纹、证书详细信息
 - **💾 进度管理**: 断点续传、会话保存、结果导出（JSON/Excel）
 - **🎯 多格式支持**: JKS、PKCS12 (.p12/.pfx)、Android Keystore
@@ -60,31 +61,106 @@ python extractor_jks_hash.py --help
 
 ## 📖 使用方法
 
-### 1. 批量 Hash 提取
+### 🆕 智能路径识别（v2.1+）
+
+现在支持**三种输入模式**，自动识别路径类型：
+
+| 模式 | 适用场景 | 示例 |
+|------|---------|------|
+| **根目录批量模式** | 批量处理多个证书 | `python cli_batch_crack.py certificate/` |
+| **UUID子目录模式** ✨ | 处理单个UUID目录 | `python cli_batch_crack.py certificate/uuid123/` |
+| **单文件模式** ✨ | 快速破解单个文件 | `python cli_batch_crack.py certificate/uuid123/app.jks` |
+
+---
+
+### 1. 批量破解（推荐）
+
+#### 模式1：根目录批量处理（原有功能）
 
 ```bash
-# 从默认 certificate 目录提取
-python extractor_jks_hash.py -m ?a?a?a?a?a?a
+# 批量破解默认目录（certificate/）下所有UUID子目录的keystore
+python cli_batch_crack.py certificate
 
-# 从自定义目录提取
-python extractor_jks_hash.py -d /path/to/keystores -m ?u?l?l?l?d?d
+# 省略参数（默认为certificate目录）
+python cli_batch_crack.py
 
-# 提取到指定输出文件
-python extractor_jks_hash.py -m ?a?a?a?a?a?a -o my_hashes.txt
+# 批量破解自定义根目录
+python cli_batch_crack.py /path/to/keystores
 ```
 
-### 2. 批量破解
+**目录结构示例**：
+```
+certificate/
+├── uuid1/
+│   └── apk.keystore
+├── uuid2/
+│   └── apk.keystore
+└── uuid3/
+    └── apk.keystore
+```
+
+---
+
+#### 模式2：UUID子目录处理 ✨ 新增
 
 ```bash
-# 批量破解默认目录（certificate/）
-python cli_batch_crack.py -m ?a?a?a?a?a?a
+# 只破解特定UUID目录下的证书
+python cli_batch_crack.py certificate/00a2c44cdfd14d45addb4104acf3fe0c
 
-# 批量破解自定义目录
-python cli_batch_crack.py -d /path/to/keystores -m ?u?l?l?l?d?d
-
-# 指定输出目录
-python cli_batch_crack.py -m ?a?a?a?a?a?a -o custom_output
+# 支持任意路径
+python cli_batch_crack.py certificatetest50/uuid123
 ```
+
+**目录结构示例**：
+```
+certificate/uuid123/
+├── apk.keystore       # 会被处理
+├── app.jks            # 会被处理
+└── backup.keystore    # 会被处理
+```
+
+**输出示例**：
+```
+✅ UUID子目录模式：发现 3 个keystore
+⚡ 提取性能: 4.79 文件/秒
+✅ Hash提取完成
+```
+
+---
+
+#### 模式3：单文件快速破解 ✨ 新增
+
+```bash
+# 直接指定keystore文件路径
+python cli_batch_crack.py certificate/uuid123/apk.keystore
+
+# 支持.jks和.keystore扩展名
+python cli_batch_crack.py /path/to/my_app.jks
+```
+
+**输出示例**：
+```
+✅ 单文件模式：apk.keystore
+✅ 发现 1 个keystore文件
+✅ Hash提取完成
+```
+
+---
+
+### 2. 批量 Hash 提取
+
+```bash
+# 从默认 certificate 目录提取（根目录模式）
+python extractor_jks_hash.py certificate
+
+# 从UUID子目录提取（新增）
+python extractor_jks_hash.py certificate/uuid123
+
+# 从单个文件提取（新增）
+python extractor_jks_hash.py certificate/uuid123/apk.keystore
+```
+
+---
 
 ### 3. GPU 破解
 
@@ -98,6 +174,8 @@ python cracker_hashcat_gpu.py hash.txt -m ?a?a?a?a?a?a -a jksprivk
 # 启用优化和高性能模式
 python cracker_hashcat_gpu.py hash.txt -m ?a?a?a?a?a?a -O -w 4
 ```
+
+---
 
 ### 4. 证书信息提取
 
@@ -250,27 +328,72 @@ cd hashcat-6.2.6
 
 ## 🐛 常见问题
 
-### "No hashes loaded" 错误
+### 智能路径识别相关 ✨
+
+#### "发现 0 个keystore文件"
+- **原因**: 文件扩展名不正确或路径不存在
+- **解决**:
+  - 确保文件扩展名为 `.jks` 或 `.keystore`
+  - 使用 `ls` 或 `dir` 命令验证路径存在
+  - 检查目录结构是否符合预期
+
+#### "不支持的文件类型"
+- **原因**: 传入的文件不是keystore格式
+- **解决**: 仅支持 `.jks` 和 `.keystore` 文件
+
+#### 如何知道使用了哪种模式？
+查看输出信息：
+```bash
+✅ 单文件模式：apk.keystore           # 单文件模式
+✅ UUID子目录模式：发现 1 个keystore    # UUID目录模式
+✅ 根目录批量模式：遍历 50 个子目录     # 批量模式
+```
+
+---
+
+### 破解相关
+
+#### "No hashes loaded" 错误
 - **原因**: Hash 格式不兼容
 - **解决**: 确保使用 JksPrivkPrepare.jar 生成 `$jksprivk$` 格式，而非 keystore2john
 
-### "Separator unmatched" 错误
+#### "Separator unmatched" 错误
 - **原因**: 混用了不同工具的 hash 格式
 - **解决**: JKS 私钥破解必须使用 JksPrivkPrepare.jar
 
-### GPU 性能低
+#### GPU 性能低
 - **解决**: 检查 CUDA 驱动，使用 `-w 4` 和 `-O` 参数优化
 
-### Java 环境问题
+#### Java 环境问题
 - **解决**: 确保 `java` 和 `keytool` 命令在系统 PATH 中
 
 ## 📚 深入了解
 
-查看 [CLAUDE.md](CLAUDE.md) 获取完整的：
-- 详细架构设计
-- 开发指南
-- 关键技术要点
-- 工作流程示例
+### 开发文档
+
+- **[CLAUDE.md](CLAUDE.md)** - 完整的开发指南
+  - 详细架构设计
+  - 开发指南
+  - 关键技术要点
+  - 工作流程示例
+
+### 功能更新文档（v2.1+）
+
+- **[USAGE_UPDATE.md](USAGE_UPDATE.md)** - 智能路径识别使用指南 ✨
+  - 三种模式详细说明
+  - 实战示例和完整命令
+  - 技术细节和识别逻辑
+  - 常见问题FAQ
+
+- **[OPTIMIZATION_SINGLE_FILE.md](OPTIMIZATION_SINGLE_FILE.md)** - 优化方案技术文档
+  - 问题分析和解决方案
+  - 代码实现细节
+  - 测试验证方法
+
+- **[OPTIMIZATION_SUMMARY.md](OPTIMIZATION_SUMMARY.md)** - 实施总结报告
+  - 完整的优化过程
+  - 测试结果和性能对比
+  - 代码变更统计
 
 ## 🤝 贡献
 
