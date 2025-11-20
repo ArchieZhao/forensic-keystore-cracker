@@ -267,14 +267,30 @@ class BatchCrackCli:
         console.print("\n" + "="*60)
         console.print("[bold yellow]步骤 1/3: 批量Hash提取[/bold yellow]")
 
-        # 创建阶段计时器
-        phase1_timer = BenchmarkTimer("阶段1 - Hash提取")
+        # 统计keystore文件数量
+        keystore_patterns = ["*.jks", "*.keystore", "*.bks"]
+        keystore_files = []
+        for pattern in keystore_patterns:
+            keystore_files.extend(self.certificate_dir.rglob(pattern))
+        total_keystores = len(keystore_files)
+
+        console.print(f"[cyan]📁 发现 {total_keystores} 个keystore文件[/cyan]")
+
+        # 创建阶段计时器（传入total_items）
+        phase1_timer = BenchmarkTimer(
+            "阶段1 - Hash提取",
+            total_items=total_keystores,
+            verbose=True
+        )
         phase1_timer.start()
 
         if self.batch_hash_file.exists():
             console.print(f"[green]✅ Hash文件已存在: {self.batch_hash_file}[/green]")
             if not Confirm.ask("是否重新提取hash?"):
+                # 即使跳过，也标记为完成
+                phase1_timer.update_progress(total_keystores)
                 self.steps['hash_extraction'] = True
+
                 phase1_stats = phase1_timer.end()
                 self.phase_stats['phase1_hash_extraction'] = phase1_stats
                 self.benchmark_reporter.save_stats("阶段1-Hash提取(跳过)", phase1_stats, {
@@ -286,12 +302,24 @@ class BatchCrackCli:
         console.print("[cyan]🔄 启动批量hash提取器...[/cyan]")
 
         try:
-            # 调用批量hash提取器
+            # 调用批量hash提取器（传入进度回调）
             from extractor_jks_hash import JksHashExtractor
-            extractor = JksHashExtractor(certificate_dir=str(self.certificate_dir))
+
+            def hash_extraction_progress(current, total):
+                """Hash提取进度回调"""
+                phase1_timer.update_progress(current)
+
+            extractor = JksHashExtractor(
+                certificate_dir=str(self.certificate_dir),
+                progress_callback=hash_extraction_progress
+            )
             success = extractor.run()
 
             if success and self.batch_hash_file.exists():
+                # 提取成功，更新完成数
+                extracted_count = extractor.stats['successful_extracts']
+                phase1_timer.update_progress(extracted_count)
+
                 self.steps['hash_extraction'] = True
                 console.print("[green]✅ Hash提取完成[/green]")
 
@@ -324,8 +352,19 @@ class BatchCrackCli:
         console.print("\n" + "="*60)
         console.print("[bold yellow]步骤 2/3: GPU批量破解[/bold yellow]")
 
-        # 创建阶段计时器
-        phase2_timer = BenchmarkTimer("阶段2 - GPU破解")
+        # 统计hash数量
+        total_hashes = 0
+        if self.batch_hash_file.exists():
+            with open(self.batch_hash_file, 'r', encoding='utf-8') as f:
+                total_hashes = sum(1 for line in f if line.strip().startswith('$jksprivk$'))
+            console.print(f"[cyan]🔑 发现 {total_hashes} 个hash待破解[/cyan]")
+
+        # 创建阶段计时器（传入total_items）
+        phase2_timer = BenchmarkTimer(
+            "阶段2 - GPU破解",
+            total_items=total_hashes,
+            verbose=True
+        )
         phase2_timer.start()
 
         if not self.batch_hash_file.exists():
@@ -429,7 +468,15 @@ class BatchCrackCli:
             
             return_code = process.poll()
             console.print(f"\n破解完成，返回码: {return_code}")
-            
+
+            # 统计破解成功的数量并更新进度
+            cracked_count = 0
+            if self.potfile_path.exists():
+                with open(self.potfile_path, 'r', encoding='utf-8') as f:
+                    cracked_count = sum(1 for line in f if ':' in line.strip())
+                phase2_timer.update_progress(cracked_count)
+                console.print(f"[green]✅ 成功破解 {cracked_count}/{total_hashes} 个密码[/green]")
+
             # 保存统计
             phase2_stats = phase2_timer.end()
             self.phase_stats['phase2_gpu_cracking'] = phase2_stats
@@ -461,12 +508,21 @@ class BatchCrackCli:
         except KeyboardInterrupt:
             console.print("\n[yellow]⏹️ 用户中断破解[/yellow]")
             console.print("[cyan]💡 可以稍后使用 --restore 恢复会话[/cyan]")
+
+            # 统计已破解的数量
+            cracked_count = 0
+            if self.potfile_path.exists():
+                with open(self.potfile_path, 'r', encoding='utf-8') as f:
+                    cracked_count = sum(1 for line in f if ':' in line.strip())
+                phase2_timer.update_progress(cracked_count)
+
             # 即使中断也认为这一步完成了（可以恢复）
             self.steps['gpu_cracking'] = True
             phase2_stats = phase2_timer.end()
             self.phase_stats['phase2_gpu_cracking'] = phase2_stats
             self.benchmark_reporter.save_stats("阶段2-GPU破解(中断)", phase2_stats, {
-                'status': '用户中断'
+                'status': '用户中断',
+                'cracked_count': cracked_count
             })
             return True
         except Exception as e:
@@ -479,8 +535,19 @@ class BatchCrackCli:
         console.print("\n" + "="*60)
         console.print("[bold yellow]步骤 3/3: 结果分析与报告生成[/bold yellow]")
 
-        # 创建阶段计时器
-        phase3_timer = BenchmarkTimer("阶段3 - 结果分析")
+        # 统计破解成功的数量
+        cracked_count = 0
+        if self.potfile_path.exists():
+            with open(self.potfile_path, 'r', encoding='utf-8') as f:
+                cracked_count = sum(1 for line in f if ':' in line.strip())
+            console.print(f"[cyan]📊 发现 {cracked_count} 个已破解密码待分析[/cyan]")
+
+        # 创建阶段计时器（传入total_items）
+        phase3_timer = BenchmarkTimer(
+            "阶段3 - 结果分析",
+            total_items=cracked_count,
+            verbose=True
+        )
         phase3_timer.start()
 
         if not self.potfile_path.exists():
@@ -497,12 +564,21 @@ class BatchCrackCli:
         console.print("[cyan]🔍 启动结果分析器...[/cyan]")
 
         try:
-            # 调用结果分析器
+            # 调用结果分析器（传入进度回调）
             from analyzer_crack_result import CrackResultAnalyzer
-            analyzer = CrackResultAnalyzer()
+
+            def result_analysis_progress(current, total):
+                """结果分析进度回调"""
+                phase3_timer.update_progress(current)
+
+            analyzer = CrackResultAnalyzer(progress_callback=result_analysis_progress)
             success = analyzer.analyze_and_report()
 
             if success:
+                # 分析成功，更新完成数
+                successful_count = analyzer.stats['successful_complete_info']
+                phase3_timer.update_progress(successful_count)
+
                 self.steps['result_analysis'] = True
                 console.print("[green]✅ 结果分析完成[/green]")
 
@@ -637,7 +713,7 @@ class BatchCrackCli:
             self.phase_stats['total'] = total_stats
 
             # 保存总体统计
-            self.benchmark_reporter.save_stats("总计", total_stats, {
+            self.benchmark_reporter.save_stats("全流程统计", total_stats, {
                 'all_phases_completed': all(self.steps.values())
             })
 

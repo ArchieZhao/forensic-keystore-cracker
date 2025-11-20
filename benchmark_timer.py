@@ -367,15 +367,18 @@ class BenchmarkReporter:
 
             console.print()
 
-        # 总计
+        # 整体汇总
         total_time = sum(record['elapsed_seconds'] for record in self.stats_history)
+        total_completed = sum(record['completed_items'] for record in self.stats_history)
         total_items = sum(record['total_items'] for record in self.stats_history)
-        avg_speed = sum(record['speed'] for record in self.stats_history) / len(self.stats_history)
 
-        console.print("[bold green]📈 总计[/bold green]")
-        console.print(f"  ⏱️  总耗时: {timedelta(seconds=int(total_time))}")
-        console.print(f"  📦 总处理数: {total_items}")
-        console.print(f"  ⚡ 平均速度: {avg_speed:.2f} items/秒")
+        # 总体平均速度 = 总完成数 / 总耗时（更科学的加权平均）
+        overall_speed = total_completed / total_time if total_time > 0 else 0.0
+
+        console.print("[bold green]📈 整体汇总[/bold green]")
+        console.print(f"  ⏱️  累计耗时: {timedelta(seconds=int(total_time))}")
+        console.print(f"  📦 累计完成: {total_completed}/{total_items} 项")
+        console.print(f"  ⚡ 综合速度: {overall_speed:.2f} items/秒")
         console.print()
 
 

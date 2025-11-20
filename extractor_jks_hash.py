@@ -79,7 +79,7 @@ from benchmark_timer import BenchmarkTimer, timer
 console = Console()
 
 class JksHashExtractor:
-    def __init__(self, certificate_dir="certificate"):
+    def __init__(self, certificate_dir="certificate", progress_callback=None):
         self.jar_path = "JKS-private-key-cracker-hashcat/JksPrivkPrepare.jar"
         self.certificate_dir = Path(certificate_dir)
         self.output_dir = Path("batch_crack_output")
@@ -87,6 +87,9 @@ class JksHashExtractor:
 
         # 线程池大小（基于12900K的线程数）
         self.max_workers = 16
+
+        # 进度回调函数
+        self.progress_callback = progress_callback
 
         # 统计信息
         self.stats = {
@@ -318,7 +321,12 @@ class JksHashExtractor:
                         })
 
                     # 更新计时器进度
-                    extract_timer.update_progress(self.stats['successful_extracts'] + self.stats['failed_extracts'])
+                    current_progress = self.stats['successful_extracts'] + self.stats['failed_extracts']
+                    extract_timer.update_progress(current_progress)
+
+                    # 调用外部进度回调（如果提供）
+                    if self.progress_callback:
+                        self.progress_callback(current_progress, len(keystores))
 
                     progress.advance(task, 1)
 

@@ -147,13 +147,16 @@ def _extract_worker(args):
         }
 
 class CrackResultAnalyzer:
-    def __init__(self):
+    def __init__(self, progress_callback=None):
         self.certificate_dir = Path("certificate")
         self.output_dir = Path("batch_crack_output")
         self.potfile_path = self.output_dir / "batch_results.potfile"
         self.mapping_file = self.output_dir / "uuid_hash_mapping.json"
         self.keystore_extractor = KeystoreInfoExtractor()
-        
+
+        # 进度回调函数
+        self.progress_callback = progress_callback
+
         # 结果统计
         self.stats = {
             'total_keystores': 0,
@@ -338,7 +341,12 @@ class CrackResultAnalyzer:
                         self.stats['failed_info_extraction'] += 1
 
                     # 更新计时器进度
-                    extract_timer.update_progress(len(complete_results))
+                    current_progress = len(complete_results)
+                    extract_timer.update_progress(current_progress)
+
+                    # 调用外部进度回调（如果提供）
+                    if self.progress_callback:
+                        self.progress_callback(current_progress, len(tasks))
 
                     progress.advance(task, 1)
 
