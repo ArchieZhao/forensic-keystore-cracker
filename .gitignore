@@ -83,8 +83,11 @@ tmp/
 debug.log
 
 # 大型工具（通过官方渠道下载，不上传到GitHub）
+# 保留目录结构但忽略所有文件（除了.gitkeep）
 hashcat-6.2.6/*
+!hashcat-6.2.6/.gitkeep
 john-1.9.0/*
+!john-1.9.0/.gitkeep
 # 注意：JksPrivkPrepare.jar 保留在仓库中（体积小且必需）
 
 # Windows
@@ -123,8 +126,6 @@ crack_results_*.xlsx
 *.dll
 *.so
 *.dylib
-!hashcat-6.2.6/hashcat.exe
-!john-1.9.0/run/john.exe
 
 # 其他无关文件
 tools/
