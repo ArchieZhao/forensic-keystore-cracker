@@ -1,0 +1,135 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Forensic Specific - Sensitive Data
+# 破解结果和敏感数据（不应上传到GitHub）
+analysis_results/
+progress/
+batch_crack_output/
+certificates/
+*.potfile
+*.restore
+*.log
+
+# 证书文件（包含敏感密钥）
+certificate/
+*.keystore
+*.jks
+*.p12
+*.pfx
+*.cer
+*.crt
+*.pem
+*.key
+
+# Hash文件（可能包含敏感信息）
+*.hash
+hash.txt
+all_keystores.hash
+
+# Hashcat临时文件
+hashcat.potfile
+*.restore
+*.dictstat
+
+# John the Ripper临时文件
+*.pot
+john.pot
+
+# 测试和临时文件
+test_*.py
+temp/
+tmp/
+*.tmp
+*.bak
+debug.log
+
+# 大型工具（通过官方渠道下载，不上传到GitHub）
+hashcat-6.2.6/
+john-1.9.0/
+# 注意：JksPrivkPrepare.jar 保留在仓库中（体积小且必需）
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# 编译文件
+*.class
+*.jar
+!JKS-private-key-cracker-hashcat/JksPrivkPrepare.jar
+
+# 会话数据
+session_*.json
+
+# IDE配置文件
+.claude/
+.cursor/
+.windsurf/
+
+# 测试和旧版本文件
+testandold/
+test/
+*_test.py
+*_old.py
+
+# 导出文件
+crack_results_*.json
+crack_results_*.xlsx
+*.xlsx
+!requirements.txt
+
+# 大文件和二进制文件
+*.exe
+*.dll
+*.so
+*.dylib
+!hashcat-6.2.6/hashcat.exe
+!john-1.9.0/run/john.exe
+
+# 其他无关文件
+tools/
+opt/
+docs/*.pdf
+
+# JKS工具目录 - 只保留jar文件
+JKS-private-key-cracker-hashcat/*
+!JKS-private-key-cracker-hashcat/JksPrivkPrepare.jar
+!JKS-private-key-cracker-hashcat/README.md
