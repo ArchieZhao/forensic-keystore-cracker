@@ -1,8 +1,118 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-GPU性能监控器 - 专为RTX 3080长时间破解任务优化
-监控温度、功耗、内存使用等关键指标
+"""GPU性能实时监控器
+
+使用nvidia-smi查询GPU温度/功耗/显存/利用率，
+检测hashcat进程状态和potfile更新时间，
+通过rich Live实时刷新监控界面，记录JSON日志，
+提供温度/功耗/显存超限警告。
+
+Architecture:
+    nvidia-smi查询 → 数据解析 → rich布局 → Live刷新 → JSON日志
+
+    GPUMonitor (gpu_monitor.py:26)
+        ├─ __init__() (L27): 初始化阈值（温度80/85°C，功耗300W，显存90%）
+        ├─ get_gpu_info() (L50): nvidia-smi查询6个指标（name, temp, power, memory, util）
+        ├─ check_hashcat_status() (L87): tasklist检查hashcat.exe进程 + potfile时间戳
+        ├─ log_sample() (L112): 记录JSON样本到gpu_performance.log，保留最近1000个
+        ├─ create_monitor_table() (L138): 创建实时监控Table（当前值/状态/历史最高）
+        ├─ create_status_panel() (L175): 创建状态Panel（hashcat运行/potfile更新/监控时间）
+        ├─ create_performance_bars() (L196): 创建性能条形图Bar（温度/功耗/利用率/显存）
+        ├─ check_warnings() (L225): 检查3级警告（温度≥80/85°C，功耗≥300W，显存≥90%）
+        ├─ create_layout() (L242): 组合Layout（header/main/footer，left/right分区）
+        ├─ start_monitoring() (L295): 主循环，Live刷新interval秒
+        └─ show_summary() (L334): 显示监控总结Table（时长/采样/最高温度/功耗/显存）
+
+Features:
+    - nvidia-smi实时查询：6个指标（name, temp, power, memory, util）(gpu_monitor.py:53-56)
+    - 3级温度警告：80°C警告，85°C危险 (gpu_monitor.py:44-45, 148-156)
+    - hashcat进程检测：tasklist + potfile时间戳 (gpu_monitor.py:91-102)
+    - rich Live刷新：1 FPS实时更新Layout (gpu_monitor.py:305)
+    - JSON日志记录：追加写入gpu_performance.log (gpu_monitor.py:135-136)
+    - 样本数限制：保留最近1000个样本 (gpu_monitor.py:131-132)
+    - 性能条形图：Bar组件显示4个指标 (gpu_monitor.py:196-223)
+    - 监控总结：统计最高温度/功耗/显存 (gpu_monitor.py:334-373)
+
+Args (交互式输入):
+    监控间隔（秒）(int): rich.prompt.IntPrompt交互式输入，默认5秒
+
+        示例：
+        python gpu_monitor.py
+        # 提示：监控间隔（秒）[5]: 10  # 输入10秒间隔
+        # 或直接按Enter使用默认5秒
+
+Returns (输出):
+    batch_crack_output/gpu_performance.log: JSON日志（每行一个样本）
+        格式: {"timestamp": "ISO8601", "temperature": float, "power_draw": float,
+               "memory_percent": float, "utilization": float, "hashcat_running": bool}
+
+    终端显示（rich Live Layout）:
+        - Header Panel: 标题 + 当前时间
+        - Left Table: 实时监控表（5行：温度/功耗/显存/利用率/显存MB）
+        - Right Status Panel: hashcat状态 + potfile更新 + 监控时间 + 样本数
+        - Right Bars Table: 性能条形图（4行Bar）
+        - Footer Panel: 警告列表或"所有指标正常"
+        - 退出时Summary Table: 监控时长/采样次数/最高值/健康建议
+
+Requirements:
+    - nvidia-smi (NVIDIA GPU驱动，查询GPU信息)
+    - rich (终端UI: Console, Live, Table, Panel, Layout, Bar, IntPrompt)
+    - tasklist (Windows命令，检查hashcat.exe进程)
+    - Python标准库: subprocess, json, time, datetime, threading, pathlib
+
+Technical Notes:
+    nvidia-smi查询命令:
+        参数: --query-gpu=name,temperature.gpu,power.draw,memory.used,memory.total,utilization.gpu
+        格式: --format=csv,noheader,nounits (gpu_monitor.py:53-56)
+        超时: 5秒 (gpu_monitor.py:59)
+        解析: 按逗号分割6个字段 (gpu_monitor.py:62-78)
+
+    温度警告阈值:
+        80°C: 警告状态"⚠️ 警告"，黄色 (gpu_monitor.py:44, 151-153)
+        85°C: 危险状态"🔥 危险"，红色 (gpu_monitor.py:45, 148-150)
+        <80°C: 正常状态"✅ 正常"，绿色 (gpu_monitor.py:154-156)
+
+    hashcat进程检测:
+        tasklist命令: /FI "IMAGENAME eq hashcat.exe" /FO CSV (gpu_monitor.py:92)
+        进程判断: 'hashcat.exe' in stdout (gpu_monitor.py:96)
+        potfile时间戳: stat().st_mtime转datetime (gpu_monitor.py:102)
+
+    样本管理:
+        记录字段: timestamp, temperature, power_draw, memory_percent, utilization, hashcat_running (gpu_monitor.py:114-121)
+        限制数量: 保留最近1000个样本 (gpu_monitor.py:131-132)
+        日志格式: JSON Lines（每行一个JSON对象）(gpu_monitor.py:136)
+
+    rich Live刷新:
+        刷新率: 1 FPS (gpu_monitor.py:305)
+        更新间隔: 用户指定interval秒 (gpu_monitor.py:324)
+        布局结构: 3行Layout（header/main/footer），main分左右2列 (gpu_monitor.py:247-257)
+
+    性能条形图范围:
+        温度: 0-90°C (gpu_monitor.py:204)
+        功耗: 0-350W (gpu_monitor.py:209)
+        利用率: 0-100% (gpu_monitor.py:213)
+        显存: 0-100% (gpu_monitor.py:216)
+
+Workflow:
+    1. 初始化GPUMonitor，设置阈值（温度80/85°C，功耗300W，显存90%）
+    2. 使用nvidia-smi测试GPU可用性
+    3. rich.prompt.IntPrompt交互式输入监控间隔（默认5秒）
+    4. 启动rich Live刷新（1 FPS）
+    5. 主监控循环：
+       - nvidia-smi查询6个GPU指标
+       - tasklist检查hashcat.exe进程状态
+       - 读取potfile最后修改时间
+       - 记录JSON样本到gpu_performance.log
+       - 创建Layout（Table/Panel/Bar组件）
+       - Live.update()刷新显示
+       - sleep(interval)等待下次查询
+    6. Ctrl+C中断或异常退出
+    7. 显示监控总结Table（时长/采样/最高值）
+    8. 显示健康建议（温度/功耗评估）
+
+Author: Forensic Keystore Cracker Project
+Version: 1.0.0
+License: 仅用于授权的数字取证和安全研究
 """
 
 import os

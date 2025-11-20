@@ -1,7 +1,97 @@
 #!/usr/bin/env python3
-"""
-JKS证书提取和MD5计算工具
-用于从已知密码的JKS keystore中提取公钥证书并计算MD5签名
+# -*- coding: utf-8 -*-
+"""JKS证书提取和指纹计算工具
+
+从已知密码的JKS keystore中导出公钥证书（PEM格式），
+使用keytool计算MD5/SHA1/SHA256指纹，用于Android APK签名验证。
+
+Architecture:
+    Keystore验证 → 别名扫描 → 证书导出 → 指纹计算 → 详细信息展示
+
+    CertificateExtractor (certificate_extractor.py:21)
+        ├─ validate_keystore() (L26): keytool -list验证密码，30秒超时
+        ├─ list_aliases() (L57): 解析PrivateKeyEntry和trustedCertEntry
+        ├─ export_certificate() (L107): keytool -exportcert导出PEM格式（-rfc）
+        ├─ calculate_certificate_md5() (L142): 计算文件MD5 + keytool -printcert指纹
+        ├─ get_certificate_details() (L200): 提取Owner/Issuer/Serial/ValidFrom等
+        └─ process_keystore() (L255): 主流程，支持单个/全部别名批量处理
+
+Features:
+    - 双重MD5计算：文件MD5 + 证书指纹MD5 (certificate_extractor.py:148-174)
+    - PEM格式导出：使用-rfc参数生成标准PEM证书 (certificate_extractor.py:121)
+    - 多哈希支持：MD5/SHA1/SHA256三种指纹算法 (certificate_extractor.py:161-174)
+    - 别名过滤：支持指定单个别名或处理全部 (certificate_extractor.py:277-288)
+    - rich表格展示：格式化显示证书信息和指纹 (certificate_extractor.py:177-191)
+
+Args (命令行):
+    keystore (str): JKS keystore文件路径（必需）
+    password (str): Keystore storepass密码（必需）
+    -a, --alias (str, optional): 指定证书别名，默认处理所有别名
+    -o, --output (str, optional): 输出目录，默认'certificates'
+    -v, --verbose (bool, optional): 显示详细错误堆栈
+
+        示例：
+        python certificate_extractor.py keystore.jks password123
+        python certificate_extractor.py keystore.jks password123 -a mykey
+        python certificate_extractor.py keystore.jks password123 -o certs
+
+Returns (输出):
+    证书文件: {output_dir}/{alias}_certificate.crt (PEM格式)
+    终端显示:
+        - 证书别名列表表格
+        - MD5/SHA1/SHA256指纹表格
+        - Owner/Issuer/Serial/Valid等详细信息表格
+        - Android APK签名MD5高亮显示
+
+    返回值 (List[Dict]):
+        [
+            {
+                'alias': str,              # 证书别名
+                'type': str,               # 'Private Key' or 'Certificate'
+                'cert_file': str,          # 导出的证书文件路径
+                'md5': str,                # 证书MD5指纹（无冒号，小写）
+                'details': Dict            # Owner/Issuer/Serial/ValidFrom等
+            }
+        ]
+
+Requirements:
+    - Java JDK 8+ (keytool命令必需)
+    - rich (终端UI)
+    - Python标准库: subprocess, hashlib, argparse
+
+Technical Notes:
+    双重MD5计算策略:
+        文件MD5: hashlib.md5(file_content) - 证书文件二进制MD5 (certificate_extractor.py:148-150)
+        证书MD5: keytool -printcert解析的指纹 - Android APK签名使用的MD5 ⭐ (certificate_extractor.py:169-170)
+        优先返回证书MD5（Android标准），文件MD5仅作备份 (certificate_extractor.py:194)
+
+    别名类型识别:
+        PrivateKeyEntry: 包含私钥和证书链的条目 → 'Private Key' (certificate_extractor.py:80-83)
+        trustedCertEntry: 仅包含公钥证书的条目 → 'Certificate' (certificate_extractor.py:80-83)
+
+    指纹格式处理:
+        keytool输出: MD5: AB:CD:EF:...
+        处理后: abcdef... (移除冒号，转小写) (certificate_extractor.py:170)
+
+    超时控制:
+        validate_keystore设置30秒超时 (certificate_extractor.py:41)
+        防止密钥库损坏导致keytool挂起
+
+Workflow:
+    1. 验证keystore路径存在性
+    2. keytool -list验证密码正确性（30秒超时）
+    3. 解析别名列表，识别PrivateKeyEntry和trustedCertEntry
+    4. 根据-a参数筛选目标别名（单个或全部）
+    5. 循环处理每个别名：
+       - keytool -exportcert导出PEM证书
+       - hashlib计算文件MD5
+       - keytool -printcert提取MD5/SHA1/SHA256指纹
+       - keytool -printcert解析Owner/Issuer等详细信息
+    6. 显示汇总表格，高亮Android APK签名MD5
+
+Author: Forensic Keystore Cracker Project
+Version: 2.0.0
+License: 仅用于授权的数字取证和安全研究
 """
 
 import os

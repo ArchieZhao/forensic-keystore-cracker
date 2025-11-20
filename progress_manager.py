@@ -1,7 +1,204 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-进度管理器 - 支持破解进度保存和断点续传
+"""破解进度管理器
+
+管理批量keystore破解任务的会话状态、断点续传、进度跟踪、结果导出，
+使用MD5生成会话ID，JSON格式保存进度文件，10秒自动保存，
+支持rich.prompt交互式恢复确认，导出Excel/JSON格式化结果报告。
+
+Architecture:
+    会话创建 → 任务跟踪 → 自动保存 → 断点续传 → 结果导出
+
+    ProgressManager (progress_manager.py:77)
+        ├─ __init__() (L80): 初始化progress目录 + 10秒自动保存间隔
+        ├─ generate_session_id() (L87): MD5(target+mask+mode+date)[:12]生成会话ID
+        ├─ create_session() (L92): 创建新会话或检测并恢复未完成会话
+        ├─ _confirm_resume() (L137): rich.prompt.Confirm交互式确认恢复
+        ├─ get_pending_tasks() (L146): 过滤status="pending"的任务列表
+        ├─ get_task_by_path() (L154): 通过file_path查找TaskProgress
+        ├─ start_task() (L164): 更新status="processing" + start_time + attempts++
+        ├─ complete_task() (L177): 更新status="completed" + password + 证书信息（7个字段）
+        ├─ fail_task() (L202): 更新status="failed" + error_message
+        ├─ skip_task() (L218): 更新status="skipped" + reason
+        ├─ _update_estimated_completion() (L234): 基于平均duration计算预估完成时间
+        ├─ _auto_save() (L256): 10秒间隔自动保存progress/{session_id}.json
+        ├─ save_session() (L263): JSON序列化BatchProgress到文件
+        ├─ load_session() (L276): JSON反序列化恢复BatchProgress对象
+        ├─ list_sessions() (L291): glob扫描progress/*.json返回session_id列表
+        ├─ delete_session() (L296): 删除进度文件
+        ├─ show_progress() (L308): rich Table显示进度（9行：目标/掩码/模式/总数/已完成/已失败/已跳过/进度%/预计完成）
+        ├─ get_results_summary() (L340): 生成结果汇总字典（10个统计字段 + 破解结果列表）
+        ├─ export_results() (L379): 导出JSON和XLSX（2个工作表）
+        ├─ _export_to_xlsx() (L424): openpyxl生成Excel（破解结果表 + 统计信息表）
+        └─ cleanup_completed_sessions() (L515): 清理7天前已完成的旧会话
+
+    TaskProgress (dataclass, progress_manager.py:21)
+        ├─ 11个字段：file_path, status, password, start_time, end_time, duration,
+        │            error_message, attempts, alias, public_key_md5, public_key_sha1,
+        │            keystore_type, certificate_info
+        ├─ to_dict() (L38): 使用asdict()转换为字典
+        └─ from_dict() (L42): 类方法反序列化
+
+    BatchProgress (dataclass, progress_manager.py:45)
+        ├─ 10个字段：session_id, target_path, mask, mode, total_files,
+        │            completed_files, failed_files, skipped_files, start_time,
+        │            last_update, estimated_completion, tasks (List[TaskProgress])
+        ├─ to_dict() (L65): 递归序列化tasks列表
+        └─ from_dict() (L71): 类方法递归反序列化
+
+Features:
+    - 会话ID生成：MD5(target_path_mask_mode_YYYYMMDD)[:12] (progress_manager.py:89-90)
+    - 断点续传：检测未完成会话 + rich.prompt.Confirm交互式确认 (progress_manager.py:98-107)
+    - 5种任务状态：pending, processing, completed, failed, skipped (progress_manager.py:25)
+    - 自动保存：10秒间隔检查 + JSON序列化 (progress_manager.py:84, 256-261)
+    - 证书信息跟踪：alias, public_key_md5, public_key_sha1, keystore_type, certificate_info (progress_manager.py:32-36)
+    - 预估完成时间：基于已完成任务平均duration计算 (progress_manager.py:234-254)
+    - UUID作为ID：使用file_path.parent.name（UUID文件夹名）(progress_manager.py:353)
+    - Excel双表导出：破解结果表（9列）+ 统计信息表（10行）(progress_manager.py:438-509)
+    - 会话清理：删除7天前且已完成（completed+failed+skipped=total）的会话 (progress_manager.py:515-538)
+
+Args (方法参数):
+    ProgressManager.__init__(progress_dir: str = "progress"):
+        初始化进度管理器，创建progress目录
+
+    create_session(target_path: str, mask: str, mode: str, file_list: List[str]) -> str:
+        创建新会话或恢复未完成会话，返回session_id
+
+    complete_task(file_path: str, password: str, duration: float,
+                  alias: str = None, public_key_md5: str = None, public_key_sha1: str = None,
+                  keystore_type: str = None, certificate_info: Dict[str, Any] = None) -> bool:
+        完成任务并记录证书信息（7个字段）
+
+    export_results(output_file: Optional[str] = None, export_xlsx: bool = True) -> str:
+        导出结果到JSON和XLSX，返回文件路径
+
+        示例：
+        # 初始化进度管理器
+        pm = ProgressManager(progress_dir="progress")
+
+        # 创建会话
+        files = ["cert1/apk.keystore", "cert2/apk.keystore"]
+        session_id = pm.create_session("/path/to/certs", "?a?a?a?a?a?a", "batch", files)
+
+        # 处理任务
+        for task in pm.get_pending_tasks():
+            pm.start_task(task.file_path)
+            # ... 破解逻辑 ...
+            pm.complete_task(task.file_path, password="123456", duration=120.5,
+                           alias="mykey", public_key_md5="A1B2C3...", public_key_sha1="D4E5F6...")
+
+        # 导出结果
+        xlsx_path = pm.export_results(export_xlsx=True)
+
+Returns (返回值):
+    TaskProgress对象（11个字段）:
+        file_path (str): keystore文件路径
+        status (str): pending/processing/completed/failed/skipped
+        password (str): 破解的密码
+        start_time (str): ISO8601开始时间
+        end_time (str): ISO8601结束时间
+        duration (float): 破解耗时（秒）
+        error_message (str): 错误信息
+        attempts (int): 尝试次数
+        alias (str): keystore别名
+        public_key_md5 (str): 公钥MD5哈希
+        public_key_sha1 (str): 公钥SHA1哈希
+        keystore_type (str): "JKS" or "PKCS12"
+        certificate_info (Dict): 证书详细信息
+
+    BatchProgress对象（10个字段 + tasks列表）:
+        session_id (str): 12位MD5会话ID
+        target_path (str): 目标路径
+        mask (str): 密码掩码
+        mode (str): 破解模式
+        total_files (int): 总文件数
+        completed_files (int): 已完成数
+        failed_files (int): 已失败数
+        skipped_files (int): 已跳过数
+        start_time (str): ISO8601开始时间
+        last_update (str): ISO8601最后更新时间
+        estimated_completion (str): ISO8601预估完成时间
+        tasks (List[TaskProgress]): 任务列表
+
+    导出文件（2种格式）:
+        {base_name}.json: 结果汇总JSON（10个统计字段 + 破解结果列表）
+        {base_name}.xlsx: Excel报告（2个工作表：破解结果9列 + 统计信息10行）
+
+Requirements:
+    - rich (Console, Table, Panel, Confirm)
+    - openpyxl (可选，Excel导出)
+    - Python标准库: json, time, hashlib, pathlib, datetime, dataclasses
+
+Technical Notes:
+    会话ID生成策略:
+        内容: f"{target_path}_{mask}_{mode}_{YYYYMMDD}" (progress_manager.py:89)
+        哈希: hashlib.md5(content.encode()).hexdigest()[:12] (progress_manager.py:90)
+        示例: "a1b2c3d4e5f6"（12位十六进制）
+
+    断点续传流程:
+        1. 检测未完成会话：load_session(session_id) (progress_manager.py:98)
+        2. 显示会话信息：目标/进度 (progress_manager.py:100-102)
+        3. 交互式确认：rich.prompt.Confirm.ask() (progress_manager.py:104, 141)
+        4. 恢复或创建新会话 (progress_manager.py:105-109)
+
+    任务状态机:
+        pending → processing (start_task) → completed/failed/skipped
+        状态字段: task.status (progress_manager.py:25)
+        状态更新: L170, L185, L208, L224
+
+    自动保存机制:
+        间隔: 10秒 (progress_manager.py:84)
+        检查: time.time() - last_save_time >= auto_save_interval (progress_manager.py:259)
+        触发: start_task, complete_task, fail_task, skip_task调用_auto_save() (progress_manager.py:174, 199, 215, 231)
+
+    预估完成时间计算:
+        平均耗时: sum(task.duration) / len(completed_tasks) (progress_manager.py:246)
+        剩余文件: total - completed - failed - skipped (progress_manager.py:247-250)
+        预估秒数: remaining * avg_duration (progress_manager.py:252)
+        完成时间: datetime.now().timestamp() + estimated_seconds (progress_manager.py:253-254)
+
+    UUID作为ID设计:
+        ID字段: file_path.parent.name (progress_manager.py:353)
+        原因: certificate/[UUID]/apk.keystore结构，UUID保证唯一性
+        用途: Excel导出的"ID"列，便于数据库关联
+
+    Excel导出结构:
+        工作表1 - 破解结果 (progress_manager.py:438-483):
+            9列: 路径, ID, 文件名, 别名, 私钥密码, 签名公钥MD5, 签名公钥SHA1, keystore类型, 破解耗时
+            样式: 蓝色表头（#366092） + 边框 + 自动列宽（最大50）
+
+        工作表2 - 统计信息 (progress_manager.py:485-509):
+            10行: 会话ID, 破解时间, 目标路径, 密码掩码, 破解模式, 总文件数, 成功破解, 破解失败, 跳过文件, 成功率
+            样式: 加粗键名 + 边框
+
+    会话清理策略:
+        保留天数: 7天 (progress_manager.py:515)
+        清理条件: 文件修改时间 < 当前时间-7天 AND 已完成（completed+failed+skipped>=total）(progress_manager.py:524-531)
+        文件操作: session_file.unlink() (progress_manager.py:532)
+
+Workflow:
+    1. 初始化ProgressManager，创建progress目录
+    2. 调用create_session(target_path, mask, mode, file_list)
+    3. 生成会话ID：MD5(target_mask_mode_date)[:12]
+    4. 检测未完成会话并交互式确认恢复
+    5. 创建BatchProgress对象并初始化所有TaskProgress（status="pending"）
+    6. 保存会话到progress/{session_id}.json
+    7. 循环处理任务：
+       - get_pending_tasks()获取待处理任务
+       - start_task(file_path)更新status="processing"
+       - 破解成功：complete_task()记录password和证书信息
+       - 破解失败：fail_task()记录error_message
+       - 自动保存：每10秒检查并保存
+    8. 更新预估完成时间（基于平均duration）
+    9. show_progress()显示rich Table进度
+    10. 导出结果：
+        - get_results_summary()生成汇总字典
+        - export_results()导出JSON和Excel（2个工作表）
+    11. cleanup_completed_sessions()清理7天前旧会话
+
+Author: Forensic Keystore Cracker Project
+Version: 1.0.0
+License: 仅用于授权的数字取证和安全研究
 """
 
 import os

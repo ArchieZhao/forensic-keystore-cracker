@@ -1,8 +1,67 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-批量JKS Hash提取器 - 专为70个keystore优化
-针对Windows 11 + RTX 3080 + 6位密码场景
+"""批量JKS Keystore Hash提取器
+
+从指定目录批量扫描JKS keystore文件，调用JksPrivkPrepare.jar提取私钥hash值，
+生成Hashcat -m 15500兼容的$jksprivk$格式批量破解文件。
+
+Architecture:
+    扫描keystore → JksPrivkPrepare.jar → $jksprivk$格式hash → 批量文件 + 映射JSON
+
+    BatchHashExtractor (batch_hash_extractor.py:89)
+        ├─ verify_environment() (L108): 检查Java/JAR/证书目录/GPU环境
+        ├─ scan_keystores() (L157): 递归扫描certificate/[UUID]/apk.keystore
+        ├─ extract_single_hash() (L176): 单文件hash提取，30秒超时
+        ├─ batch_extract_hashes() (L237): 16线程并行提取，rich进度条
+        ├─ create_batch_hash_file() (L278): 生成all_keystores.hash + uuid_hash_mapping.json
+        └─ generate_crack_script() (L312): 生成run_batch_crack.py破解脚本
+
+Features:
+    - 16线程并行提取 (ThreadPoolExecutor)
+    - rich库实时进度显示
+    - 单文件30秒超时控制
+    - 失败文件详细记录
+
+Args (命令行):
+    certificate_dir (str, optional): keystore文件根目录，默认'certificate'
+
+        示例：
+        python batch_hash_extractor.py                    # 使用默认certificate目录
+        python batch_hash_extractor.py /path/to/keystores # 绝对路径
+        python batch_hash_extractor.py ../my_certs        # 相对路径
+
+Returns (输出文件):
+    batch_crack_output/all_keystores.hash: 纯hash文件，每行一个$jksprivk$格式hash
+    batch_crack_output/uuid_hash_mapping.json: UUID→hash→path映射关系
+    batch_crack_output/run_batch_crack.py: Hashcat破解脚本 (RTX 3080优化参数)
+
+Requirements:
+    - Python 3.8+
+    - Java Runtime Environment (JRE 8+)
+    - JksPrivkPrepare.jar (JKS-private-key-cracker-hashcat/JksPrivkPrepare.jar)
+    - rich (pip install rich)
+
+Technical Notes:
+    Hash格式兼容性:
+        JksPrivkPrepare.jar生成$jksprivk$格式 → Hashcat -m 15500 (batch_hash_extractor.py:198-202)
+        keystore2john.py生成$keystore$格式 → John the Ripper (不兼容Hashcat)
+
+    UUID作为唯一标识:
+        使用certificate/[UUID]/apk.keystore的UUID文件夹名作为ID (batch_hash_extractor.py:296-300)
+        避免多个证书使用相同文件名导致冲突
+
+    环境检查策略:
+        GPU检查失败不阻塞执行 (batch_hash_extractor.py:153-155)
+        hash提取仅需CPU，GPU用于后续Hashcat破解
+
+Performance:
+    - 并发: 16线程 (Intel i9-12900K优化)
+    - 单文件: <30秒
+    - 70文件批量: 2-5分钟
+
+Author: Forensic Keystore Cracker Project
+Version: 2.0.0
+License: 仅用于授权的数字取证和安全研究
 """
 
 import os

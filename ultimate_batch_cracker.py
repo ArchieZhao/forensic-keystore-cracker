@@ -1,8 +1,170 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-终极批量JKS破解器 - 一键完成所有步骤
-专为Windows 11 + RTX 3080 + 70个keystore优化
+"""批量JKS破解自动化流程编排器
+
+整合batch_hash_extractor、hashcat GPU破解、batch_result_analyzer三步流程，
+自动化完成：Hash提取 → GPU掩码攻击 → 证书信息提取 → Excel/JSON报告生成，
+支持rich交互式确认、断点续传、实时进度显示、会话恢复。
+
+Architecture:
+    环境检查 → Hash提取 → GPU破解 → 结果分析 → 报告生成
+
+    UltimateBatchCracker (ultimate_batch_cracker.py:20)
+        ├─ __init__() (L21): 初始化certificate_dir、output_dir、关键文件路径
+        ├─ show_banner() (L38): rich Panel显示启动横幅
+        ├─ check_prerequisites() (L47): 检查6个前置条件（目录/工具/依赖）
+        ├─ _check_java() (L69): subprocess.run(['java', '-version'])测试Java环境
+        ├─ _check_gpu() (L76): subprocess.run(['nvidia-smi'])测试GPU状态
+        ├─ _check_python_deps() (L88): 检查rich和openpyxl导入
+        ├─ step1_extract_hashes() (L96): 调用BatchHashExtractor.run()提取hash
+        ├─ step2_gpu_cracking() (L130): 构建hashcat命令并执行GPU破解（16个参数）
+        ├─ step3_analyze_results() (L259): 调用BatchResultAnalyzer.analyze_and_report()
+        ├─ show_final_summary() (L297): 显示3步状态 + 4个输出文件检查
+        └─ run() (L352): 主流程编排，异常处理 + finally总结
+
+Features:
+    - 三步自动化流程：Hash提取 → GPU破解 → 结果分析 (ultimate_batch_cracker.py:96, 130, 259)
+    - 6项环境检查：Certificate目录、JksPrivkPrepare.jar、Hashcat、Java、GPU、Python依赖 (ultimate_batch_cracker.py:51-58)
+    - rich交互式确认：3次Confirm.ask（重新提取/重新破解/开始破解）(ultimate_batch_cracker.py:103, 142, 169)
+    - hashcat参数优化：16个参数含RTX 3080优化（-O, -w 4, --markov-disable, --segment-size 32）(ultimate_batch_cracker.py:190-207)
+    - 绝对路径处理：resolve()避免工作目录问题 (ultimate_batch_cracker.py:186-187)
+    - 会话恢复支持：--session ultimate_batch_crack（可用--restore恢复）(ultimate_batch_cracker.py:204, 251)
+    - 实时输出：subprocess.Popen实时打印hashcat进度 (ultimate_batch_cracker.py:227-232)
+    - 步骤状态跟踪：3个布尔标志记录完成状态 (ultimate_batch_cracker.py:32-36)
+    - 最终总结：3步状态表 + 4个输出文件检查（含glob通配符）(ultimate_batch_cracker.py:297-343)
+
+Args (命令行):
+    certificate_dir (str, optional): keystore文件根目录，默认'certificate'
+
+        示例：
+        python ultimate_batch_cracker.py                    # 使用默认certificate目录
+        python ultimate_batch_cracker.py my_certificates    # 使用自定义目录
+        python ultimate_batch_cracker.py ../certs           # 使用相对路径
+        python ultimate_batch_cracker.py /path/to/certs     # 使用绝对路径
+
+Returns (输出文件):
+    batch_crack_output/all_keystores.hash: 批量hash文件（$jksprivk$格式）
+    batch_crack_output/batch_results.potfile: Hashcat破解结果（格式：hash:password）
+    batch_crack_output/batch_crack_results_YYYYMMDD_HHMMSS.json: JSON详细报告
+    batch_crack_output/batch_crack_results_YYYYMMDD_HHMMSS.xlsx: Excel详细报告（2个工作表）
+
+Requirements:
+    - batch_hash_extractor.py (Hash提取器)
+    - batch_result_analyzer.py (结果分析器)
+    - hashcat-6.2.6/hashcat.exe (GPU破解引擎)
+    - JKS-private-key-cracker-hashcat/JksPrivkPrepare.jar (Hash生成工具)
+    - Java Runtime Environment (JRE 8+)
+    - NVIDIA GPU + nvidia-smi (可选，GPU检查失败不阻塞)
+    - rich (交互式UI)
+    - openpyxl (Excel导出)
+
+Technical Notes:
+    三步流程编排:
+        步骤1 - Hash提取 (ultimate_batch_cracker.py:96-128):
+            调用: BatchHashExtractor(certificate_dir).run()
+            检查: batch_hash_file.exists()确认成功
+            交互: 已存在时Confirm.ask("是否重新提取hash?")
+            输出: batch_crack_output/all_keystores.hash
+
+        步骤2 - GPU破解 (ultimate_batch_cracker.py:130-257):
+            调用: subprocess.Popen(hashcat_cmd, cwd=hashcat.parent)
+            参数: 16个hashcat参数（-m 15500, -a 3, ?1?1?1?1?1?1等）
+            交互: 已存在时Confirm.ask("是否重新开始破解?")，开始前Confirm.ask("确认开始GPU破解?")
+            输出: batch_crack_output/batch_results.potfile
+
+        步骤3 - 结果分析 (ultimate_batch_cracker.py:259-295):
+            调用: BatchResultAnalyzer().analyze_and_report()
+            检查: potfile_path.exists()确认有结果
+            交互: 不存在时Confirm.ask("是否继续分析（可能没有结果）?")
+            输出: batch_crack_results_YYYYMMDD_HHMMSS.json + .xlsx
+
+    环境检查6项 (ultimate_batch_cracker.py:51-58):
+        1. Certificate目录: self.certificate_dir.exists()
+        2. JksPrivkPrepare.jar: Path("JKS-private-key-cracker-hashcat/JksPrivkPrepare.jar").exists()
+        3. Hashcat: self.hashcat_path.exists()
+        4. Java环境: subprocess.run(['java', '-version']).returncode == 0
+        5. GPU状态: subprocess.run(['nvidia-smi']).returncode == 0（失败返回True继续）
+        6. Python依赖: import rich; import openpyxl
+
+    hashcat命令16个参数 (ultimate_batch_cracker.py:190-207):
+        -m 15500: JKS私钥模式
+        -a 3: 掩码攻击
+        hash_file: 绝对路径（resolve()）
+        -1 a-zA-Z0-9: 自定义字符集（62字符）
+        ?1?1?1?1?1?1: 6位掩码
+        --force: 强制运行
+        -O: 优化内核
+        -w 4: 最高工作负载
+        --markov-disable: 禁用马尔可夫链
+        --segment-size 32: 优化内存段
+        --status: 显示状态
+        --status-timer 60: 每分钟更新
+        --session ultimate_batch_crack: 会话名（可用--restore恢复）
+        --potfile-path: 绝对路径（resolve()）
+        --outfile-format 1: 输出格式hash:password
+
+    绝对路径处理 (ultimate_batch_cracker.py:186-187):
+        abs_hash_file = self.batch_hash_file.resolve()
+        abs_potfile = self.potfile_path.resolve()
+        原因: hashcat在自己的工作目录执行，相对路径会失败
+
+    工作目录设置 (ultimate_batch_cracker.py:218):
+        cwd=str(self.hashcat_path.parent)
+        原因: hashcat需要在hashcat-6.2.6目录执行以找到OpenCL等资源
+
+    步骤状态跟踪 (ultimate_batch_cracker.py:32-36):
+        self.steps = {
+            'hash_extraction': False,  # 步骤1完成标志
+            'gpu_cracking': False,     # 步骤2完成标志
+            'result_analysis': False   # 步骤3完成标志
+        }
+        更新时机: 每步成功后设置为True（L116, L239, L283）
+        用途: show_final_summary()显示完成状态表（L308-318）
+
+    会话恢复机制 (ultimate_batch_cracker.py:204, 251):
+        会话名: --session ultimate_batch_crack
+        恢复命令: hashcat --session ultimate_batch_crack --restore
+        中断处理: KeyboardInterrupt后提示用户可用--restore恢复（L251）
+        状态保存: 中断时仍标记gpu_cracking=True允许进入步骤3（L253）
+
+    输出文件检查 (ultimate_batch_cracker.py:322-343):
+        4个文件: all_keystores.hash, batch_results.potfile,
+                batch_crack_results_*.json, batch_crack_results_*.xlsx
+        通配符处理: glob()查找最新文件max(files, key=st_mtime)（L332-334）
+
+Workflow:
+    1. 显示rich Panel启动横幅
+    2. 检查6个前置条件（目录/工具/依赖）
+    3. 步骤1 - Hash提取：
+       - 检查all_keystores.hash是否存在
+       - 若存在：Confirm.ask是否重新提取
+       - 调用BatchHashExtractor(certificate_dir).run()
+       - 验证batch_hash_file.exists()
+    4. 步骤2 - GPU破解：
+       - 检查batch_results.potfile是否存在
+       - 若存在：Confirm.ask是否重新破解
+       - 显示破解参数Table（8行）
+       - 显示警告信息（66天预估时间）
+       - Confirm.ask确认开始破解
+       - 预创建空potfile（touch()）
+       - resolve()生成绝对路径
+       - 构建16个hashcat参数
+       - subprocess.Popen(cwd=hashcat.parent)执行
+       - 实时打印stdout
+       - 检查return_code（0=成功，1=未找到密码，其他=错误）
+    5. 步骤3 - 结果分析：
+       - 检查potfile_path.exists()
+       - 若不存在：Confirm.ask是否继续分析
+       - 调用BatchResultAnalyzer().analyze_and_report()
+       - 生成JSON和Excel报告
+    6. finally显示最终总结：
+       - 3步状态Table（✅完成/❌未完成）
+       - 4个输出文件检查（glob通配符查找最新）
+       - 4条重要提示
+
+Author: Forensic Keystore Cracker Project
+Version: 1.0.0
+License: 仅用于授权的数字取证和安全研究
 """
 
 import os
@@ -40,8 +202,7 @@ class UltimateBatchCracker:
         console.print(Panel.fit(
             "[bold cyan]🚀 终极批量JKS破解器[/bold cyan]\n"
             "[yellow]Windows 11 + i9-12900K + RTX 3080 专用版[/yellow]\n"
-            "[green]目标: 70个keystore × 6位字母数字密码[/green]\n"
-            "[red]预计: 62^6 = 56,800,235,584 种组合 ≈ 66天[/red]",
+            "[green]解密 keystore × 6位字母数字密码[/green]",
             border_style="cyan"
         ))
     

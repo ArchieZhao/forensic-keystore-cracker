@@ -1,11 +1,112 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-GPU加速Hashcat批量破解工具 - 专为Windows 11 + RTX 3080优化
-作者: AI助手
-版本: 2.1 - 6位密码专用版
-描述: 高性能GPU加速JKS/PKCS#12口令破解，专门优化6位大小写字母+数字密码
-特点: 实时状态监控、断点续跑、6位密码快速破解
+"""GPU加速Hashcat批量破解引擎
+
+调用Hashcat GPU加速引擎批量破解JKS/PKCS12/MD5密码，
+使用6位掩码攻击（?1?1?1?1?1?1，62^6=56,800,235,584种组合），
+支持实时监控、断点续传、rich进度展示。
+
+Architecture:
+    Hash文件 → 算法检测 → Hashcat进程 → 状态监控 → 结果导出
+
+    GPUHashcatCracker (gpu_hashcat_cracker.py:49)
+        ├─ __init__() (L52): 初始化配置、算法映射、GPU检测、信号处理
+        ├─ setup_logging() (L103): 配置日志到logs/gpu_crack_YYYYMMDD_HHMMSS.log
+        ├─ detect_gpu_info() (L128): nvidia-smi查询GPU名称/显存/驱动版本
+        ├─ print_banner() (L159): rich Panel展示系统配置和算法支持表
+        ├─ detect_hash_algorithm() (L209): 正则识别MD5/JKS/PKCS12格式
+        ├─ read_hash_file() (L240): 逐行读取并分类hash到算法类型
+        ├─ get_mask_attacks() (L272): 返回6位掩码["?1?1?1?1?1?1"]
+        ├─ build_hashcat_command() (L299): 构建hashcat命令含RTX 3080优化参数
+        ├─ parse_hashcat_status() (L356): 解析JSON状态提取进度/速度/温度
+        ├─ monitor_hashcat_process() (L395): 实时监控subprocess并更新rich进度条
+        ├─ crack_single_hash() (L498): 单hash破解含临时文件和会话管理
+        ├─ run_batch_crack() (L605): 批量破解主流程，按算法分组处理
+        ├─ generate_final_report() (L702): 生成统计表格和密码列表
+        └─ save_results_to_file() (L750): 导出JSON结果到crack_results_YYYYMMDD_HHMMSS.json
+
+Features:
+    - 6位掩码攻击：自定义字符集?1=a-zA-Z0-9 (gpu_hashcat_cracker.py:325-327)
+    - RTX 3080优化：-O, -w 3, --markov-disable, --segment-size 32 (gpu_hashcat_cracker.py:331-343)
+    - 算法自动检测：正则匹配MD5/JKS/PKCS12格式 (gpu_hashcat_cracker.py:209-238)
+    - 实时监控：JSON状态解析 + rich进度条 (gpu_hashcat_cracker.py:356-451)
+    - 断点续传：会话恢复 --restore (gpu_hashcat_cracker.py:473-496)
+    - GPU信息检测：nvidia-smi查询并fallback (gpu_hashcat_cracker.py:128-157)
+    - 信号处理：SIGINT/SIGTERM优雅停止 (gpu_hashcat_cracker.py:122-126)
+
+Args (命令行):
+    hash_file (str, optional): hash文件路径，交互式输入或默认example_6digit_hashes.txt
+    --hashcat-path (str, optional): hashcat.exe路径，默认'E:\\app\\forensic\\hashcat-6.2.6\\hashcat.exe'
+    --output-dir (str, optional): 输出目录，默认'gpu_crack_results'
+    --wordlist-dir (str, optional): 字典目录（当前未使用，仅掩码攻击）
+    --max-time (int, optional): 单hash超时秒数，默认3600
+    --gpu-only (bool, optional): 仅GPU标志（默认行为）
+    --complete (bool, optional): 强制完整模式，跳过智能策略
+
+        示例：
+        python gpu_hashcat_cracker.py hash.txt
+        python gpu_hashcat_cracker.py hash.txt --hashcat-path D:\\hashcat\\hashcat.exe
+        python gpu_hashcat_cracker.py hash.txt --output-dir results --complete
+
+Returns (输出文件):
+    gpu_crack_results/potfiles/{session_name}.potfile: Hashcat原始结果（格式：hash:password）
+    gpu_crack_results/logs/gpu_crack_YYYYMMDD_HHMMSS.log: 详细日志
+    gpu_crack_results/crack_results_YYYYMMDD_HHMMSS.json: 统计结果JSON（含密码字典）
+    终端显示：系统配置Panel、算法支持Table、实时进度Progress、统计结果Table
+
+Requirements:
+    - Hashcat 6.2.6+ (hashcat.exe)
+    - NVIDIA GPU + CUDA驱动 (nvidia-smi可用)
+    - rich (终端UI，可选，缺失时fallback到print)
+    - Python标准库: subprocess, json, threading, signal, argparse
+
+Technical Notes:
+    算法检测优先级:
+        1. 正则匹配MD5: ^[a-f0-9]{32}$ (gpu_hashcat_cracker.py:223-225)
+        2. 关键词匹配JKS: $jks$, $keystore$, keystore (gpu_hashcat_cracker.py:228-230)
+        3. 长度回退MD5: 32字符十六进制 (gpu_hashcat_cracker.py:233-235)
+
+    Hashcat命令构建:
+        基础参数: --hash-type, --attack-mode, --potfile-path, --session, --status, --machine-readable (gpu_hashcat_cracker.py:311-320)
+        自定义字符集: -1 abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 (gpu_hashcat_cracker.py:325-326)
+        RTX 3080优化: -d 1, --force, -O, -w 3 (gpu_hashcat_cracker.py:331-336)
+        6位掩码优化: --markov-disable, --segment-size 32 (gpu_hashcat_cracker.py:341-343)
+
+    会话管理:
+        会话名格式: m{mode}_{hash_id}_{timestamp} (gpu_hashcat_cracker.py:268-270)
+        恢复命令: hashcat --session {name} --restore (gpu_hashcat_cracker.py:481-484)
+        工作目录: hashcat.exe所在目录（解决OpenCL路径问题）(gpu_hashcat_cracker.py:540, 546)
+
+    JSON状态解析:
+        提取字段: session, status, progress, recovered_hashes, devices (gpu_hashcat_cracker.py:368-380)
+        设备信息: speed, temp, util (gpu_hashcat_cracker.py:384-387)
+        更新频率: --status-timer 5秒 (gpu_hashcat_cracker.py:318)
+
+    破解性能估算:
+        RTX 3080速度: ~10,000 H/s (JKS mode 15500)
+        62^6组合: 56,800,235,584种
+        预计耗时: 56,800,235,584 / 10,000 / 3600 ≈ 1578小时 ≈ 66天
+
+Workflow:
+    1. 解析命令行参数或交互式输入hash文件
+    2. 验证hashcat.exe和hash文件存在性
+    3. 初始化GPUHashcatCracker（检测GPU、注册信号处理器）
+    4. 打印rich Panel横幅（系统配置、算法支持）
+    5. 读取hash文件并按算法分组（MD5/JKS/PKCS12）
+    6. 为每个算法创建rich进度任务
+    7. 循环处理每个hash：
+       - 创建临时hash文件到sessions/
+       - 构建hashcat命令（含RTX 3080优化参数）
+       - 启动subprocess.Popen（cwd设置为hashcat目录）
+       - 实时解析JSON状态并更新进度条
+       - 读取potfile获取破解密码
+       - 清理临时文件和会话
+    8. 生成统计Table和密码Table
+    9. 保存JSON结果到crack_results_YYYYMMDD_HHMMSS.json
+
+Author: Forensic Keystore Cracker Project
+Version: 2.1.0
+License: 仅用于授权的数字取证和安全研究
 """
 
 import os
