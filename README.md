@@ -54,39 +54,49 @@ pip install -r requirements.txt
 4. **验证环境**
 ```bash
 java -version
-python main.py --help
+python ultimate_batch_cracker.py --help
+python batch_hash_extractor.py --help
 ```
 
 ## 📖 使用方法
 
-### 1. 交互式模式（推荐新手）
+### 1. 批量 Hash 提取
 
 ```bash
-python main.py
+# 从默认 certificate 目录提取
+python batch_hash_extractor.py -m ?a?a?a?a?a?a
+
+# 从自定义目录提取
+python batch_hash_extractor.py -d /path/to/keystores -m ?u?l?l?l?d?d
+
+# 提取到指定输出文件
+python batch_hash_extractor.py -m ?a?a?a?a?a?a -o my_hashes.txt
 ```
 
-程序会引导您完成：
-- 模式选择（单文件/批量）
-- 文件选择
-- 掩码配置
-- 实时进度监控
-
-### 2. 单文件私钥密码破解
+### 2. 批量破解
 
 ```bash
-python jks_privkey_processor.py target.keystore -m ?a?a?a?a?a?a
+# 批量破解默认目录（certificate/）
+python ultimate_batch_cracker.py -m ?a?a?a?a?a?a
+
+# 批量破解自定义目录
+python ultimate_batch_cracker.py -d /path/to/keystores -m ?u?l?l?l?d?d
+
+# 指定输出目录
+python ultimate_batch_cracker.py -m ?a?a?a?a?a?a -o custom_output
 ```
 
-使用 JksPrivkPrepare.jar + Hashcat (mode 15500) 进行 GPU 加速破解。
-
-### 3. 批量破解
+### 3. GPU 破解
 
 ```bash
-# 批量破解整个目录
-python jks_privkey_processor.py certificate_folder -m ?u?l?l?l?d?d
+# 使用 GPU 破解 hash 文件
+python gpu_hashcat_cracker.py hash.txt -m ?a?a?a?a?a?a
 
-# 终极批量破解（70+ 文件）
-python ultimate_batch_cracker.py certificate_folder -m ?a?a?a?a?a?a
+# 指定算法类型（JKS 私钥）
+python gpu_hashcat_cracker.py hash.txt -m ?a?a?a?a?a?a -a jksprivk
+
+# 启用优化和高性能模式
+python gpu_hashcat_cracker.py hash.txt -m ?a?a?a?a?a?a -O -w 4
 ```
 
 ### 4. 证书信息提取
@@ -102,17 +112,11 @@ python certificate_extractor.py keystore.jks password123 -a mykey
 python certificate_extractor.py keystore.jks password123 -o certificates
 ```
 
-### 5. 结果管理
+### 5. Keystore 信息提取
 
 ```bash
-# 导出破解结果为 JSON 和 Excel
-python main.py --export SESSION_ID
-
-# 仅导出 JSON 文件
-python main.py --export SESSION_ID --json-only
-
-# 查看所有会话
-python main.py --list-sessions
+# 提取 keystore 详细信息（别名、证书、指纹）
+python keystore_info_extractor.py keystore.jks password123
 ```
 
 ## 🔐 常用密码掩码
@@ -129,62 +133,81 @@ python main.py --list-sessions
 ## 🏗️ 架构设计
 
 ```
-用户输入 → main.py
+用户输入 → 批量破解工具
     ↓
-    ├─→ 交互式模式：引导式 UI
-    └─→ 命令行模式
-         ↓
-         ├─→ 私钥破解（推荐）:
-         │    jks_privkey_processor.py
-         │      → JksPrivkPrepare.jar (提取 $jksprivk$ 格式 hash)
-         │      → gpu_hashcat_cracker.py
-         │          → hashcat.exe -m 15500 (GPU 加速破解)
-         │      → keystore_info_extractor.py (提取证书信息)
-         │
-         └─→ 容器密码路径:
-              certificate_batch_processor.py
-                → john/keystore2john.py (提取 $keystore$ 格式)
-                → john.exe (CPU 破解)
+    ├─→ batch_hash_extractor.py
+    │    → 扫描目录下所有 keystore 文件
+    │    → JksPrivkPrepare.jar (提取 $jksprivk$ 格式 hash)
+    │    → 生成统一的 hash 文件
+    │
+    ├─→ gpu_hashcat_cracker.py
+    │    → hashcat.exe -m 15500 (GPU 加速破解)
+    │    → 实时监控破解进度
+    │    → 返回破解结果
+    │
+    ├─→ ultimate_batch_cracker.py
+    │    → 整合 hash 提取 + GPU 破解 + 结果分析
+    │    → 批量处理完整流程
+    │    → 导出详细报告
+    │
+    └─→ 结果处理:
+         ├─→ keystore_info_extractor.py (提取证书详细信息)
+         ├─→ certificate_extractor.py (导出证书文件和指纹)
+         ├─→ progress_manager.py (进度管理和结果导出)
+         └─→ batch_result_analyzer.py (批量结果分析)
 ```
 
 ### 核心模块
 
 | 模块 | 功能 |
 |------|------|
-| `main.py` | 主程序入口，会话管理 |
-| `jks_privkey_processor.py` | JKS 私钥破解器（核心） |
+| `batch_hash_extractor.py` | 批量提取 keystore hash |
+| `ultimate_batch_cracker.py` | 终极批量破解器（完整流程） |
 | `gpu_hashcat_cracker.py` | GPU 破解引擎 |
 | `certificate_extractor.py` | 证书提取和指纹计算 |
 | `keystore_info_extractor.py` | Keystore 信息提取器 |
 | `progress_manager.py` | 进度管理和结果导出 |
+| `batch_result_analyzer.py` | 批量结果分析器 |
+| `gpu_monitor.py` | GPU 状态监控 |
 
 ## 📊 性能对比
 
 | 破解模式 | 工具组合 | 性能 | 适用场景 |
 |---------|---------|------|---------|
-| 私钥密码 | JksPrivkPrepare + Hashcat | ~10,000 H/s | Android APK 签名 ⭐ |
-| 容器密码 | keystore2john + John | ~500 H/s | 完整 keystore 访问 |
+| JKS 私钥密码 | JksPrivkPrepare + Hashcat GPU | ~10,000 H/s | Android APK 签名破解 ⭐ |
+| 批量破解 (70+ 文件) | ultimate_batch_cracker | 并行处理 | 大规模取证分析 ⭐ |
 
 ## 🔍 项目结构
 
 ```
 forensic-keystore-cracker/
-├── main.py                          # 主程序入口
-├── jks_privkey_processor.py         # JKS私钥密码破解器
+├── batch_hash_extractor.py          # 批量hash提取器
+├── ultimate_batch_cracker.py        # 终极批量破解器（完整流程）
 ├── gpu_hashcat_cracker.py           # GPU Hashcat破解引擎
-├── certificate_extractor.py         # 证书提取工具
+├── certificate_extractor.py         # 证书提取和指纹计算
 ├── keystore_info_extractor.py       # Keystore信息提取器
-├── progress_manager.py              # 进度管理
-├── ultimate_batch_cracker.py        # 终极批量破解器
+├── progress_manager.py              # 进度管理和结果导出
+├── batch_result_analyzer.py         # 批量结果分析器
+├── gpu_monitor.py                   # GPU状态监控
 ├── requirements.txt                 # Python依赖
-├── CLAUDE.md                        # 项目详细文档
+├── README.md                        # 项目说明文档
+├── CLAUDE.md                        # 开发指南和架构文档
 │
 ├── hashcat-6.2.6/                   # Hashcat工具（需下载）
-├── john-1.9.0/                      # John the Ripper（需下载）
-├── JKS-private-key-cracker-hashcat/
-│   └── JksPrivkPrepare.jar          # JKS hash提取工具
+│   ├── hashcat.exe                  # 主程序
+│   └── OpenCL/                      # GPU计算内核
 │
-└── certificate/                     # 输入：待破解的keystore文件
+├── john-1.9.0/                      # John the Ripper（需下载）
+│   └── run/keystore2john.py         # Keystore hash提取脚本
+│
+├── JKS-private-key-cracker-hashcat/
+│   └── JksPrivkPrepare.jar          # ⭐关键工具：JKS hash提取
+│
+├── certificate/                     # 输入：待破解的keystore文件
+│   └── [UUID]/                      # 使用UUID文件夹名作为唯一标识
+│
+├── batch_crack_output/              # 输出：批量破解结果
+└── testandold/                      # 测试文件和旧版本代码
 ```
 
 ## 🧪 测试验证
