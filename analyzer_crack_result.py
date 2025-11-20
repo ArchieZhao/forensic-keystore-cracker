@@ -9,7 +9,7 @@
 Architecture:
     Potfile → UUID映射 → Keystore提取 → Excel/JSON报告
 
-    BatchResultAnalyzer (batch_result_analyzer.py:28)
+    CrackResultAnalyzer (analyzer_crack_result.py:28)
         ├─ read_potfile_results() (L44): 读取potfile，通过uuid_hash_mapping.json反向匹配UUID
         ├─ map_keystores() (L85): 扫描certificate/[UUID]/apk.keystore建立路径映射
         ├─ extract_complete_info() (L97): 调用KeystoreInfoExtractor提取证书信息
@@ -20,16 +20,16 @@ Architecture:
         └─ analyze_and_report() (L284): 主流程执行入口
 
 Features:
-    - UUID反向映射：hash → UUID → keystore路径 (batch_result_analyzer.py:60-78)
+    - UUID反向映射：hash → UUID → keystore路径 (analyzer_crack_result.py:60-78)
     - 双重指纹提取：MD5 + SHA1公钥哈希值
-    - Excel样式化：表头着色、边框、自动列宽 (batch_result_analyzer.py:179-226)
-    - 错误容错：提取失败记录到extraction_error字段 (batch_result_analyzer.py:117-129)
+    - Excel样式化：表头着色、边框、自动列宽 (analyzer_crack_result.py:179-226)
+    - 错误容错：提取失败记录到extraction_error字段 (analyzer_crack_result.py:117-129)
 
 Args (命令行):
     无命令行参数，使用固定路径
 
         示例：
-        python batch_result_analyzer.py  # 自动读取batch_crack_output目录下的结果文件
+        python analyzer_crack_result.py  # 自动读取batch_crack_output目录下的结果文件
 
 Returns (输出文件):
     batch_crack_output/batch_crack_results_YYYYMMDD_HHMMSS.xlsx:
@@ -39,26 +39,26 @@ Returns (输出文件):
         包含summary统计和results详细数据（含extraction_success状态）
 
 Requirements:
-    - keystore_info_extractor.py (必须，提取证书信息)
+    - extractor_keystore_info.py (必须，提取证书信息)
     - rich (终端UI)
     - openpyxl (可选，Excel报告生成)
 
 Input Files:
     batch_crack_output/batch_results.potfile: Hashcat输出的密码破解结果（格式：$jksprivk$...:password）
-    batch_crack_output/uuid_hash_mapping.json: Hash到UUID的映射关系（由batch_hash_extractor.py生成）
+    batch_crack_output/uuid_hash_mapping.json: Hash到UUID的映射关系（由extractor_jks_hash.py生成）
     certificate/[UUID]/apk.keystore: 原始keystore文件
 
 Technical Notes:
     UUID映射策略:
-        使用hash_to_uuid反向索引快速查找 (batch_result_analyzer.py:60-62)
+        使用hash_to_uuid反向索引快速查找 (analyzer_crack_result.py:60-62)
         避免遍历所有UUID目录提升性能
 
     Excel列宽优化:
-        自动计算最长内容，最大限制50字符 (batch_result_analyzer.py:216-226)
+        自动计算最长内容，最大限制50字符 (analyzer_crack_result.py:216-226)
         防止超长UUID导致列宽过宽
 
     错误处理:
-        提取失败的keystore标记extraction_success=False (batch_result_analyzer.py:114, 127)
+        提取失败的keystore标记extraction_success=False (analyzer_crack_result.py:114, 127)
         错误信息记录到extraction_error字段供调试
 
 Workflow:
@@ -88,15 +88,15 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 
 # 导入现有的信息提取器
 try:
-    from keystore_info_extractor import KeystoreInfoExtractor
+    from extractor_keystore_info import KeystoreInfoExtractor
 except ImportError:
-    print("错误: 无法导入keystore_info_extractor模块")
+    print("错误: 无法导入extractor_keystore_info模块")
     import sys
     sys.exit(1)
 
 console = Console()
 
-class BatchResultAnalyzer:
+class CrackResultAnalyzer:
     def __init__(self):
         self.certificate_dir = Path("certificate")
         self.output_dir = Path("batch_crack_output")
@@ -416,7 +416,7 @@ class BatchResultAnalyzer:
         return True
 
 def main():
-    analyzer = BatchResultAnalyzer()
+    analyzer = CrackResultAnalyzer()
     success = analyzer.analyze_and_report()
     return 0 if success else 1
 

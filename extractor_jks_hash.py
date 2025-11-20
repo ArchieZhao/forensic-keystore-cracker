@@ -8,7 +8,7 @@
 Architecture:
     扫描keystore → JksPrivkPrepare.jar → $jksprivk$格式hash → 批量文件 + 映射JSON
 
-    BatchHashExtractor (batch_hash_extractor.py:89)
+    JksHashExtractor (extractor_jks_hash.py:89)
         ├─ verify_environment() (L108): 检查Java/JAR/证书目录/GPU环境
         ├─ scan_keystores() (L157): 递归扫描certificate/[UUID]/apk.keystore
         ├─ extract_single_hash() (L176): 单文件hash提取，30秒超时
@@ -26,9 +26,9 @@ Args (命令行):
     certificate_dir (str, optional): keystore文件根目录，默认'certificate'
 
         示例：
-        python batch_hash_extractor.py                    # 使用默认certificate目录
-        python batch_hash_extractor.py /path/to/keystores # 绝对路径
-        python batch_hash_extractor.py ../my_certs        # 相对路径
+        python extractor_jks_hash.py                    # 使用默认certificate目录
+        python extractor_jks_hash.py /path/to/keystores # 绝对路径
+        python extractor_jks_hash.py ../my_certs        # 相对路径
 
 Returns (输出文件):
     batch_crack_output/all_keystores.hash: 纯hash文件，每行一个$jksprivk$格式hash
@@ -77,7 +77,7 @@ from rich.table import Table
 
 console = Console()
 
-class BatchHashExtractor:
+class JksHashExtractor:
     def __init__(self, certificate_dir="certificate"):
         self.jar_path = "JKS-private-key-cracker-hashcat/JksPrivkPrepare.jar"
         self.certificate_dir = Path(certificate_dir)
@@ -474,13 +474,13 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="批量JKS Hash提取器 - 从多个keystore文件批量提取hash",
+        description="JKS Hash提取器 - 从多个keystore文件批量提取hash",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例用法:
-  python batch_hash_extractor.py                    # 使用默认的certificate目录
-  python batch_hash_extractor.py my_certificates    # 使用自定义目录
-  python batch_hash_extractor.py ../certs           # 使用相对路径
+  python extractor_jks_hash.py                    # 使用默认的certificate目录
+  python extractor_jks_hash.py my_certificates    # 使用自定义目录
+  python extractor_jks_hash.py ../certs           # 使用相对路径
         """
     )
 
@@ -493,7 +493,7 @@ def main():
 
     args = parser.parse_args()
 
-    extractor = BatchHashExtractor(certificate_dir=args.certificate_dir)
+    extractor = JksHashExtractor(certificate_dir=args.certificate_dir)
     success = extractor.run()
     return 0 if success else 1
 

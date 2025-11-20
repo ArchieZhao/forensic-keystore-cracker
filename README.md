@@ -54,8 +54,8 @@ pip install -r requirements.txt
 4. **验证环境**
 ```bash
 java -version
-python ultimate_batch_cracker.py --help
-python batch_hash_extractor.py --help
+python cli_batch_crack.py --help
+python extractor_jks_hash.py --help
 ```
 
 ## 📖 使用方法
@@ -64,59 +64,59 @@ python batch_hash_extractor.py --help
 
 ```bash
 # 从默认 certificate 目录提取
-python batch_hash_extractor.py -m ?a?a?a?a?a?a
+python extractor_jks_hash.py -m ?a?a?a?a?a?a
 
 # 从自定义目录提取
-python batch_hash_extractor.py -d /path/to/keystores -m ?u?l?l?l?d?d
+python extractor_jks_hash.py -d /path/to/keystores -m ?u?l?l?l?d?d
 
 # 提取到指定输出文件
-python batch_hash_extractor.py -m ?a?a?a?a?a?a -o my_hashes.txt
+python extractor_jks_hash.py -m ?a?a?a?a?a?a -o my_hashes.txt
 ```
 
 ### 2. 批量破解
 
 ```bash
 # 批量破解默认目录（certificate/）
-python ultimate_batch_cracker.py -m ?a?a?a?a?a?a
+python cli_batch_crack.py -m ?a?a?a?a?a?a
 
 # 批量破解自定义目录
-python ultimate_batch_cracker.py -d /path/to/keystores -m ?u?l?l?l?d?d
+python cli_batch_crack.py -d /path/to/keystores -m ?u?l?l?l?d?d
 
 # 指定输出目录
-python ultimate_batch_cracker.py -m ?a?a?a?a?a?a -o custom_output
+python cli_batch_crack.py -m ?a?a?a?a?a?a -o custom_output
 ```
 
 ### 3. GPU 破解
 
 ```bash
 # 使用 GPU 破解 hash 文件
-python gpu_hashcat_cracker.py hash.txt -m ?a?a?a?a?a?a
+python cracker_hashcat_gpu.py hash.txt -m ?a?a?a?a?a?a
 
 # 指定算法类型（JKS 私钥）
-python gpu_hashcat_cracker.py hash.txt -m ?a?a?a?a?a?a -a jksprivk
+python cracker_hashcat_gpu.py hash.txt -m ?a?a?a?a?a?a -a jksprivk
 
 # 启用优化和高性能模式
-python gpu_hashcat_cracker.py hash.txt -m ?a?a?a?a?a?a -O -w 4
+python cracker_hashcat_gpu.py hash.txt -m ?a?a?a?a?a?a -O -w 4
 ```
 
 ### 4. 证书信息提取
 
 ```bash
 # 从已知密码的 keystore 提取证书和指纹
-python certificate_extractor.py keystore.jks password123
+python extractor_certificate.py keystore.jks password123
 
 # 提取指定别名
-python certificate_extractor.py keystore.jks password123 -a mykey
+python extractor_certificate.py keystore.jks password123 -a mykey
 
 # 指定输出目录
-python certificate_extractor.py keystore.jks password123 -o certificates
+python extractor_certificate.py keystore.jks password123 -o certificates
 ```
 
 ### 5. Keystore 信息提取
 
 ```bash
 # 提取 keystore 详细信息（别名、证书、指纹）
-python keystore_info_extractor.py keystore.jks password123
+python extractor_keystore_info.py keystore.jks password123
 ```
 
 ## 🔐 常用密码掩码
@@ -135,40 +135,40 @@ python keystore_info_extractor.py keystore.jks password123
 ```
 用户输入 → 批量破解工具
     ↓
-    ├─→ batch_hash_extractor.py
+    ├─→ extractor_jks_hash.py
     │    → 扫描目录下所有 keystore 文件
     │    → JksPrivkPrepare.jar (提取 $jksprivk$ 格式 hash)
     │    → 生成统一的 hash 文件
     │
-    ├─→ gpu_hashcat_cracker.py
+    ├─→ cracker_hashcat_gpu.py
     │    → hashcat.exe -m 15500 (GPU 加速破解)
     │    → 实时监控破解进度
     │    → 返回破解结果
     │
-    ├─→ ultimate_batch_cracker.py
+    ├─→ cli_batch_crack.py
     │    → 整合 hash 提取 + GPU 破解 + 结果分析
     │    → 批量处理完整流程
     │    → 导出详细报告
     │
     └─→ 结果处理:
-         ├─→ keystore_info_extractor.py (提取证书详细信息)
-         ├─→ certificate_extractor.py (导出证书文件和指纹)
-         ├─→ progress_manager.py (进度管理和结果导出)
-         └─→ batch_result_analyzer.py (批量结果分析)
+         ├─→ extractor_keystore_info.py (提取证书详细信息)
+         ├─→ extractor_certificate.py (导出证书文件和指纹)
+         ├─→ manager_crack_progress.py (进度管理和结果导出)
+         └─→ analyzer_crack_result.py (批量结果分析)
 ```
 
 ### 核心模块
 
 | 模块 | 功能 |
 |------|------|
-| `batch_hash_extractor.py` | 批量提取 keystore hash |
-| `ultimate_batch_cracker.py` | 终极批量破解器（完整流程） |
-| `gpu_hashcat_cracker.py` | GPU 破解引擎 |
-| `certificate_extractor.py` | 证书提取和指纹计算 |
-| `keystore_info_extractor.py` | Keystore 信息提取器 |
-| `progress_manager.py` | 进度管理和结果导出 |
-| `batch_result_analyzer.py` | 批量结果分析器 |
-| `gpu_monitor.py` | GPU 状态监控 |
+| `extractor_jks_hash.py` | 批量提取 keystore hash |
+| `cli_batch_crack.py` | 终极批量破解器（完整流程） |
+| `cracker_hashcat_gpu.py` | GPU 破解引擎 |
+| `extractor_certificate.py` | 证书提取和指纹计算 |
+| `extractor_keystore_info.py` | Keystore 信息提取器 |
+| `manager_crack_progress.py` | 进度管理和结果导出 |
+| `analyzer_crack_result.py` | 批量结果分析器 |
+| `monitor_gpu_performance.py` | GPU 状态监控 |
 
 ## 📊 性能对比
 
@@ -181,14 +181,14 @@ python keystore_info_extractor.py keystore.jks password123
 
 ```
 forensic-keystore-cracker/
-├── batch_hash_extractor.py          # 批量hash提取器
-├── ultimate_batch_cracker.py        # 终极批量破解器（完整流程）
-├── gpu_hashcat_cracker.py           # GPU Hashcat破解引擎
-├── certificate_extractor.py         # 证书提取和指纹计算
-├── keystore_info_extractor.py       # Keystore信息提取器
-├── progress_manager.py              # 进度管理和结果导出
-├── batch_result_analyzer.py         # 批量结果分析器
-├── gpu_monitor.py                   # GPU状态监控
+├── extractor_jks_hash.py          # 批量hash提取器
+├── cli_batch_crack.py        # 终极批量破解器（完整流程）
+├── cracker_hashcat_gpu.py           # GPU Hashcat破解引擎
+├── extractor_certificate.py         # 证书提取和指纹计算
+├── extractor_keystore_info.py       # Keystore信息提取器
+├── manager_crack_progress.py              # 进度管理和结果导出
+├── analyzer_crack_result.py         # 批量结果分析器
+├── monitor_gpu_performance.py                   # GPU状态监控
 ├── requirements.txt                 # Python依赖
 ├── README.md                        # 项目说明文档
 ├── CLAUDE.md                        # 开发指南和架构文档
