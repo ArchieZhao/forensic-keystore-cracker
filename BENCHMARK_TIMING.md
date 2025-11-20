@@ -3,6 +3,7 @@
 ## 📋 概述
 
 本文档详细说明如何在项目的关键运行节点添加时间统计功能，包括：
+
 - 运行时间（已用时间）
 - 预计剩余时间
 - 预计总时间
@@ -11,6 +12,7 @@
 ## 🎯 需要统计的关键节点
 
 ### 1. Hash提取阶段（extractor_jks_hash.py）
+
 ```
 关键节点：
 ├─ 文件扫描开始/结束
@@ -19,6 +21,7 @@
 ```
 
 ### 2. GPU破解阶段（cracker_hashcat_gpu.py）
+
 ```
 关键节点：
 ├─ Hashcat启动
@@ -28,6 +31,7 @@
 ```
 
 ### 3. 证书信息提取阶段（analyzer_crack_result.py）
+
 ```
 关键节点：
 ├─ 批量提取开始
@@ -37,6 +41,7 @@
 ```
 
 ### 4. 完整批量破解流程（cli_batch_crack.py）
+
 ```
 关键节点：
 ├─ 流程启动
@@ -52,6 +57,7 @@
 ### 方案1: 使用Python内置time模块（简单场景）
 
 #### 基础计时器类
+
 ```python
 import time
 from typing import Optional, Dict
@@ -172,6 +178,7 @@ class BenchmarkTimer:
 ```
 
 #### 使用示例：Hash提取
+
 ```python
 # 在 extractor_jks_hash.py 中使用
 def extract_hashes(keystore_dir: Path, mask: str) -> Path:
@@ -210,6 +217,7 @@ def extract_hashes(keystore_dir: Path, mask: str) -> Path:
 ```
 
 #### 使用示例：GPU破解
+
 ```python
 # 在 cracker_hashcat_gpu.py 中使用
 def crack_with_timing(self, hash_file: Path, mask: str) -> Dict:
@@ -253,6 +261,7 @@ def crack_with_timing(self, hash_file: Path, mask: str) -> Dict:
 ```
 
 #### 使用示例：证书信息提取（多进程）
+
 ```python
 # 在 analyzer_crack_result.py 中使用
 def extract_certificates_parallel(cracked_results: List[Dict]) -> List[Dict]:
@@ -310,6 +319,7 @@ def update_progress(counter, timer):
 ```
 
 #### 使用示例：完整批量破解流程
+
 ```python
 # 在 cli_batch_crack.py 中使用
 def main():
@@ -358,214 +368,6 @@ def main():
         'phase3_cert_extraction': phase3_stats,
         'phase4_report_generation': phase4_stats
     })
-```
-
-### 方案2: 使用Rich Progress Bar（高级场景）
-
-#### Rich进度条集成
-```python
-from rich.progress import (
-    Progress,
-    SpinnerColumn,
-    BarColumn,
-    TextColumn,
-    TimeElapsedColumn,
-    TimeRemainingColumn,
-    MofNCompleteColumn,
-    TransferSpeedColumn
-)
-from rich.console import Console
-
-console = Console()
-
-
-class RichBenchmarkTimer:
-    """使用Rich进度条的高级计时器"""
-
-    def __init__(self, task_name: str, total_items: int = 0):
-        self.task_name = task_name
-        self.total_items = total_items
-        self.start_time = None
-        self.end_time = None
-        self.progress = None
-        self.task_id = None
-
-    def __enter__(self):
-        """上下文管理器入口"""
-        self.start_time = time.time()
-
-        # 创建Rich进度条
-        self.progress = Progress(
-            SpinnerColumn(),
-            TextColumn("[bold blue]{task.description}"),
-            BarColumn(),
-            MofNCompleteColumn(),
-            TextColumn("•"),
-            TimeElapsedColumn(),
-            TextColumn("•"),
-            TimeRemainingColumn(),
-            TextColumn("•"),
-            TransferSpeedColumn(),
-            console=console
-        )
-
-        self.progress.start()
-        self.task_id = self.progress.add_task(
-            self.task_name,
-            total=self.total_items
-        )
-
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """上下文管理器退出"""
-        self.end_time = time.time()
-        self.progress.stop()
-
-        elapsed = self.end_time - self.start_time
-        console.print(f"\n[green]✅ {self.task_name} 完成![/green]")
-        console.print(f"[yellow]总耗时: {timedelta(seconds=int(elapsed))}[/yellow]\n")
-
-    def update(self, advance: int = 1):
-        """更新进度"""
-        if self.progress and self.task_id is not None:
-            self.progress.update(self.task_id, advance=advance)
-
-    def set_description(self, description: str):
-        """更新任务描述"""
-        if self.progress and self.task_id is not None:
-            self.progress.update(self.task_id, description=description)
-
-
-# 使用示例
-def extract_hashes_with_rich(keystore_files: List[Path]) -> List[str]:
-    """使用Rich进度条的Hash提取"""
-
-    hashes = []
-
-    with RichBenchmarkTimer("提取JKS Hash", total_items=len(keystore_files)) as timer:
-        for keystore_file in keystore_files:
-            # 更新当前处理文件
-            timer.set_description(f"处理: {keystore_file.name}")
-
-            # 提取hash
-            hash_result = extract_single_hash(keystore_file)
-            if hash_result:
-                hashes.append(hash_result)
-
-            # 更新进度
-            timer.update(1)
-
-    return hashes
-```
-
-### 方案3: 综合统计报告生成
-
-#### Benchmark统计保存和报告
-```python
-import json
-from pathlib import Path
-from typing import Dict, List
-from datetime import datetime
-import pandas as pd
-
-
-class BenchmarkReporter:
-    """Benchmark统计报告生成器"""
-
-    def __init__(self, output_dir: Path):
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.stats_history: List[Dict] = []
-
-    def save_stats(self, stage_name: str, stats: TimingStats, metadata: Dict = None):
-        """保存单个阶段的统计数据"""
-        record = {
-            'timestamp': datetime.now().isoformat(),
-            'stage': stage_name,
-            'elapsed_seconds': stats.elapsed_seconds,
-            'elapsed_formatted': stats.elapsed_formatted,
-            'total_items': stats.total_items,
-            'completed_items': stats.completed_items,
-            'speed': stats.speed,
-            'metadata': metadata or {}
-        }
-
-        self.stats_history.append(record)
-
-        # 保存到JSON
-        json_file = self.output_dir / "benchmark_stats.json"
-        with open(json_file, 'w', encoding='utf-8') as f:
-            json.dump(self.stats_history, f, indent=2, ensure_ascii=False)
-
-    def generate_summary_report(self, output_file: str = None):
-        """生成汇总报告"""
-        if not self.stats_history:
-            console.print("[yellow]没有统计数据[/yellow]")
-            return
-
-        # 创建DataFrame
-        df = pd.DataFrame(self.stats_history)
-
-        # 生成Excel报告
-        if output_file is None:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            output_file = self.output_dir / f"benchmark_report_{timestamp}.xlsx"
-
-        with pd.ExcelWriter(output_file, engine='openpyxl') as writer:
-            # Sheet 1: 详细统计
-            df.to_excel(writer, sheet_name='详细统计', index=False)
-
-            # Sheet 2: 汇总统计
-            summary = pd.DataFrame([{
-                '总阶段数': len(df),
-                '总耗时（秒）': df['elapsed_seconds'].sum(),
-                '总耗时（格式化）': str(timedelta(seconds=int(df['elapsed_seconds'].sum()))),
-                '总处理项目数': df['total_items'].sum(),
-                '平均处理速度': df['speed'].mean(),
-            }])
-            summary.to_excel(writer, sheet_name='汇总统计', index=False)
-
-            # Sheet 3: 各阶段占比
-            stage_stats = df.groupby('stage').agg({
-                'elapsed_seconds': 'sum',
-                'total_items': 'sum',
-                'speed': 'mean'
-            }).reset_index()
-            stage_stats['耗时占比%'] = (stage_stats['elapsed_seconds'] / df['elapsed_seconds'].sum() * 100).round(2)
-            stage_stats.to_excel(writer, sheet_name='各阶段占比', index=False)
-
-        console.print(f"[green]✅ Benchmark报告已生成: {output_file}[/green]")
-
-        # 打印终端摘要
-        self.print_terminal_summary()
-
-    def print_terminal_summary(self):
-        """在终端打印摘要"""
-        console.print("\n[bold cyan]═══════════════════════════════════════[/bold cyan]")
-        console.print("[bold cyan]        Benchmark 统计摘要[/bold cyan]")
-        console.print("[bold cyan]═══════════════════════════════════════[/bold cyan]\n")
-
-        df = pd.DataFrame(self.stats_history)
-
-        # 各阶段统计
-        for stage in df['stage'].unique():
-            stage_data = df[df['stage'] == stage].iloc[0]
-            console.print(f"[yellow]📊 {stage}[/yellow]")
-            console.print(f"  ⏱️  耗时: {stage_data['elapsed_formatted']}")
-            console.print(f"  📦 处理数: {stage_data['completed_items']}/{stage_data['total_items']}")
-            console.print(f"  ⚡ 速度: {stage_data['speed']:.2f} items/秒")
-            console.print()
-
-        # 总计
-        total_time = df['elapsed_seconds'].sum()
-        total_items = df['total_items'].sum()
-
-        console.print("[bold green]📈 总计[/bold green]")
-        console.print(f"  ⏱️  总耗时: {timedelta(seconds=int(total_time))}")
-        console.print(f"  📦 总处理数: {total_items}")
-        console.print(f"  ⚡ 平均速度: {df['speed'].mean():.2f} items/秒")
-        console.print()
 ```
 
 ## 📊 完整使用示例
@@ -670,6 +472,7 @@ if __name__ == "__main__":
 ## 📈 预期输出示例
 
 ### 终端输出
+
 ```
 ═══════════════════════════════════════════════════════════
                     阶段1: Hash提取
@@ -743,28 +546,32 @@ if __name__ == "__main__":
 ### Excel报告结构
 
 #### Sheet 1: 详细统计
-| timestamp | stage | elapsed_seconds | elapsed_formatted | total_items | completed_items | speed | metadata |
-|-----------|-------|-----------------|-------------------|-------------|-----------------|-------|----------|
-| 2025-11-20T14:31:05 | Hash提取 | 65.23 | 0:01:05 | 70 | 70 | 1.08 | {"files_scanned": 70, ...} |
-| 2025-11-20T14:36:25 | GPU破解 | 320.45 | 0:05:20 | 70 | 45 | 0.14 | {"cracked_count": 45, ...} |
-| ... | ... | ... | ... | ... | ... | ... | ... |
+
+| timestamp           | stage    | elapsed_seconds | elapsed_formatted | total_items | completed_items | speed | metadata                   |
+| ------------------- | -------- | --------------- | ----------------- | ----------- | --------------- | ----- | -------------------------- |
+| 2025-11-20T14:31:05 | Hash提取 | 65.23           | 0:01:05           | 70          | 70              | 1.08  | {"files_scanned": 70, ...} |
+| 2025-11-20T14:36:25 | GPU破解  | 320.45          | 0:05:20           | 70          | 45              | 0.14  | {"cracked_count": 45, ...} |
+| ...                 | ...      | ...             | ...               | ...         | ...             | ...   | ...                        |
 
 #### Sheet 2: 汇总统计
+
 | 总阶段数 | 总耗时（秒） | 总耗时（格式化） | 总处理项目数 | 平均处理速度 |
-|---------|-------------|-----------------|-------------|-------------|
-| 5 | 425.50 | 0:07:05 | 162 | 0.76 |
+| -------- | ------------ | ---------------- | ------------ | ------------ |
+| 5        | 425.50       | 0:07:05          | 162          | 0.76         |
 
 #### Sheet 3: 各阶段占比
-| stage | elapsed_seconds | total_items | speed | 耗时占比% |
-|-------|-----------------|-------------|-------|----------|
-| Hash提取 | 65.23 | 70 | 1.08 | 15.3% |
-| GPU破解 | 320.45 | 70 | 0.14 | 75.3% |
-| 证书提取 | 38.12 | 45 | 1.18 | 9.0% |
-| 报告生成 | 1.70 | 2 | 1.00 | 0.4% |
+
+| stage    | elapsed_seconds | total_items | speed | 耗时占比% |
+| -------- | --------------- | ----------- | ----- | --------- |
+| Hash提取 | 65.23           | 70          | 1.08  | 15.3%     |
+| GPU破解  | 320.45          | 70          | 0.14  | 75.3%     |
+| 证书提取 | 38.12           | 45          | 1.18  | 9.0%      |
+| 报告生成 | 1.70            | 2           | 1.00  | 0.4%      |
 
 ## 🔧 配置选项
 
 ### 环境变量配置
+
 ```bash
 # 启用详细Benchmark
 export ENABLE_BENCHMARK=true
@@ -777,6 +584,7 @@ export PROGRESS_UPDATE_INTERVAL=2
 ```
 
 ### 代码配置
+
 ```python
 # config.py
 BENCHMARK_CONFIG = {
@@ -793,6 +601,7 @@ BENCHMARK_CONFIG = {
 ## 🎯 性能优化建议
 
 ### 减少时间统计开销
+
 ```python
 # 方案1: 批量更新进度（减少锁竞争）
 batch_size = 10
@@ -819,12 +628,14 @@ def async_update_stats(timer, completed):
 ## 🚀 下一步
 
 ### 集成到现有代码
-1. 在`extractor_jks_hash.py`中添加Hash提取计时
-2. 在`cracker_hashcat_gpu.py`中添加GPU破解实时进度
-3. 在`analyzer_crack_result.py`中添加多进程并行统计
-4. 在`cli_batch_crack.py`中集成完整Benchmark报告
+
+1. 在 `extractor_jks_hash.py`中添加Hash提取计时
+2. 在 `cracker_hashcat_gpu.py`中添加GPU破解实时进度
+3. 在 `analyzer_crack_result.py`中添加多进程并行统计
+4. 在 `cli_batch_crack.py`中集成完整Benchmark报告
 
 ### 扩展功能
+
 - [ ] GPU性能监控（温度、利用率、内存）
 - [ ] 网络统计（如果涉及远程资源）
 - [ ] 内存使用统计
