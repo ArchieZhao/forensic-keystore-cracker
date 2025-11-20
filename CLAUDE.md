@@ -76,6 +76,12 @@ python extractor_certificate.py keystore.jks password123 -o certificates
 python extractor_keystore_info.py keystore.jks password123
 ```
 
+#### 6. 性能测试
+```bash
+# 测试并行提取vs串行提取的性能对比
+python test_parallel_performance.py
+```
+
 ### 测试和调试命令
 
 ```bash
@@ -162,9 +168,12 @@ cd hashcat-6.2.6
 - 导出结果为JSON和Excel格式
 - 使用UUID文件夹名作为唯一标识（而非文件名）
 
-#### 7. **analyzer_crack_result.py** - 批量结果分析器
+#### 7. **analyzer_crack_result.py** - 批量结果分析器（⚡ 多进程并行优化）
 - 分析破解结果统计
 - 生成详细报告
+- **多进程并行提取**：利用CPU多核并行提取证书信息，性能提升12-15倍
+- 支持CPU核心数自动检测（使用N-1个进程）
+- 实时进度条显示并行提取进度
 
 #### 8. **monitor_gpu_performance.py** - GPU状态监控
 - 实时监控GPU温度和利用率

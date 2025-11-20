@@ -49,6 +49,7 @@ certificates/
 
 # 证书文件（包含敏感密钥）
 certificate/
+certificate500/
 *.keystore
 *.jks
 *.p12
