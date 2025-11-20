@@ -39,17 +39,18 @@ env/
 
 # Forensic Specific - Sensitive Data
 # 破解结果和敏感数据（不应上传到GitHub）
-analysis_results/
-progress/
-batch_crack_output/
-certificates/
+analysis_results/*
+progress/*
+batch_crack_output/*
+certificates/*
 *.potfile
 *.restore
 *.log
 
 # 证书文件（包含敏感密钥）
-certificate/
-certificatetest500/
+certificate/*
+certificatetest50/*
+certificatetest500/*
 *.keystore
 *.jks
 *.p12
@@ -82,8 +83,8 @@ tmp/
 debug.log
 
 # 大型工具（通过官方渠道下载，不上传到GitHub）
-hashcat-6.2.6/
-john-1.9.0/
+hashcat-6.2.6/*
+john-1.9.0/*
 # 注意：JksPrivkPrepare.jar 保留在仓库中（体积小且必需）
 
 # Windows
