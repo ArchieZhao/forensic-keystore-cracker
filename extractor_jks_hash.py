@@ -390,7 +390,6 @@ def run_optimized_crack():
     """运行优化的6位密码破解"""
     print("🚀 启动RTX 3080优化破解...")
     print("🎯 目标: 6位大小写字母+数字 (62^6 = 56,800,235,584 组合)")
-    print("⏰ 预计耗时: 约66天 (连续运行)")
     
     hash_file = r"{hash_file}"
     hashcat_path = r"hashcat-6.2.6\\hashcat.exe"
@@ -534,7 +533,6 @@ if __name__ == "__main__":
             console.print(f"   type {self.output_dir}\\\\batch_results.potfile")
             
             console.print(f"\\n[yellow]⚠️ 重要提示:[/yellow]")
-            console.print(f"[yellow]- 6位密码完整破解预计需要约66天[/yellow]")
             console.print(f"[yellow]- 建议24/7连续运行以获得最佳效果[/yellow]")
             console.print(f"[yellow]- 可随时Ctrl+C中断，稍后用--restore恢复[/yellow]")
             

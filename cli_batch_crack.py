@@ -144,7 +144,7 @@ Workflow:
        - 检查batch_results.potfile是否存在
        - 若存在：Confirm.ask是否重新破解
        - 显示破解参数Table（8行）
-       - 显示警告信息（66天预估时间）
+       - 显示警告信息
        - Confirm.ask确认开始破解
        - 预创建空potfile（touch()）
        - resolve()生成绝对路径
@@ -391,7 +391,6 @@ class BatchCrackCli:
         params_table.add_row("字符集", "a-z,A-Z,0-9 (62字符)")
         params_table.add_row("掩码", "?1?1?1?1?1?1 (6位)")
         params_table.add_row("组合数", "62^6 = 56,800,235,584")
-        params_table.add_row("预计时间", "约66天 (连续运行)")
         params_table.add_row("GPU优化", "RTX 3080专用参数")
         
         console.print(params_table)
